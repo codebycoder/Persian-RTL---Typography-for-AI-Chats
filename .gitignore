@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+
+# Build output
+dist/
+*.crx
+*.zip
+
+# Vite / TypeScript caches
+.vite/
+*.tsbuildinfo
+
+# Test and local tooling artifacts
+.playwright-cli/
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment and local overrides
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ESLint
+.eslintcache
+
+# Chrome extension private key (created if the extension is packed)
+*.pem
+
+# Local font files; keep the folder via .gitkeep
+fonts/*
+!fonts/.gitkeep

@@ -1,0 +1,29 @@
+{
+  "name": "chat-font-customizer",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Customize your ChatGPT reading experience.",
+  "type": "module",
+  "packageManager": "pnpm@10.15.1",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
+    "lint": "eslint .",
+    "test": "node --import ./scripts/register-ts.mjs --test src/shared/settings.test.ts src/shared/font-registry.test.ts src/shared/font-availability.test.ts src/content/style-lifecycle.test.ts src/content/font-style.test.ts",
+    "fonts:inspect": "node ./scripts/list-local-font-names.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/chrome": "^0.2.9",
+    "@types/node": "^26.5.0",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.70.0",
+    "vite": "^8.2.2"
+  }
+}

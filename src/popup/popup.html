@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat Font Customizer</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="header">
+        <img
+          class="logo"
+          src="/icons/icon48.png"
+          width="36"
+          height="36"
+          alt=""
+        />
+        <div class="heading">
+          <h1 data-extension-name>Chat Font Customizer</h1>
+          <p class="description">Reading fonts for ChatGPT</p>
+        </div>
+      </header>
+
+      <form class="settings" data-settings-form data-enabled="true">
+        <label class="power">
+          <span class="power-copy">
+            <span class="power-title">Font customization</span>
+            <span class="power-state" data-enabled-state aria-hidden="true">On</span>
+          </span>
+          <span class="switch">
+            <input
+              type="checkbox"
+              id="enabled-toggle"
+              class="switch-input"
+              role="switch"
+              data-enabled-toggle
+              checked
+            />
+            <span class="switch-ui" aria-hidden="true"></span>
+          </span>
+        </label>
+
+        <div class="font-controls" data-font-controls>
+          <div class="field">
+            <label for="font-select">Font</label>
+            <div class="select-wrap">
+              <select id="font-select" data-font-select></select>
+            </div>
+          </div>
+
+          <section class="preview" aria-label="Font preview">
+            <p class="preview-kicker">Preview</p>
+            <p class="preview-fa" lang="fa" dir="rtl" data-preview-fa>
+              خواندن این گفتگو باید واضح و راحت باشد.
+            </p>
+            <p class="preview-en" lang="en" dir="ltr" data-preview-en>
+              Reading this conversation should feel clear and comfortable.
+            </p>
+          </section>
+        </div>
+
+        <p class="status" data-status role="status" aria-live="polite" hidden></p>
+      </form>
+    </main>
+
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>
