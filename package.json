@@ -10,7 +10,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
     "lint": "eslint .",
-    "test": "node --import ./scripts/register-ts.mjs --test src/shared/settings.test.ts src/shared/font-registry.test.ts src/shared/font-availability.test.ts src/content/style-lifecycle.test.ts src/content/font-style.test.ts",
+    "test": "node --import ./scripts/register-ts.mjs --test src/shared/settings.test.ts src/shared/font-registry.test.ts src/shared/font-availability.test.ts src/content/style-lifecycle.test.ts src/content/platforms/registry.test.ts src/content/platforms/types.test.ts src/content/platforms/chatgpt/selectors.test.ts src/content/platforms/chatgpt/adapter.test.ts src/content/platforms/claude/selectors.test.ts src/content/platforms/claude/adapter.test.ts src/content/platforms/claude/direction.test.ts src/content/platforms/claude/lifecycle.test.ts src/content/platforms/claude/engine.test.ts src/content/css-rule.test.ts src/content/font-style.test.ts src/content/bidi-style.test.ts src/content/font-engine.test.ts",
     "fonts:inspect": "node ./scripts/list-local-font-names.mjs"
   },
   "engines": {

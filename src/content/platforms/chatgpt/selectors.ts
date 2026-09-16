@@ -10,7 +10,7 @@
  *    `whitespace-pre-wrap` container. On this frontend the site declares
  *    `font-family` directly on Markdown descendants (p, li, h1-h6, ...), so
  *    the container font does not inherit into assistant messages; the
- *    descendant rule in font-style.ts exists for this reason.
+ *    font engine descendant rule exists for this reason.
  *
  * 2. Current frontend (verified against a live logged-out conversation on
  *    2026-09-08): turns are `li[data-message-role="user"|"assistant"]`,
@@ -85,57 +85,16 @@ export const CONVERSATION_READING_SELECTORS = [
 ] as const;
 
 /**
- * Ordinary rendered-Markdown text elements. ChatGPT's stylesheet declares
- * `font-family` directly on descendants such as `p` and `li`; a direct
- * declaration always beats the font inherited from the `.markdown`
- * container, so these elements need their own scoped rule.
- *
- * Deliberately excluded: `pre`, `code`, `kbd`, `samp`, `tt` (code stays
- * monospace), `svg` (icons), and `span` (syntax-highlighting spans live
- * inside `pre code`; ordinary Markdown text does not rely on bare spans).
+ * Markdown / assistant-markdown nodes wrap many blocks. Isolating the
+ * wrapper would give the whole message one inferred base direction.
  */
-export const MARKDOWN_TEXT_DESCENDANTS = [
-  "p",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "ul",
-  "ol",
-  "li",
-  "dl",
-  "dt",
-  "dd",
-  "blockquote",
-  "table",
-  "thead",
-  "tbody",
-  "tfoot",
-  "tr",
-  "th",
-  "td",
-  "caption",
-  "a",
-  "em",
-  "strong",
-  "b",
-  "i",
-  "u",
-  "s",
-  "del",
-  "ins",
-  "mark",
-  "small",
-  "sub",
-  "sup",
-  "abbr",
-  "cite",
-  "q",
-  "figure",
-  "figcaption",
-] as const;
+export function isBidiWrapperSelector(selector: string): boolean {
+  return selector.includes(".markdown") || selector.includes("[data-assistant-markdown]");
+}
+
+export const BIDI_LEAF_SELECTORS = CONVERSATION_READING_SELECTORS.filter(
+  (selector) => !isBidiWrapperSelector(selector),
+);
 
 export const CODE_PRESERVE_SELECTORS = [
   '[data-message-author-role] .markdown :is(pre, code, kbd, samp, tt)',
@@ -213,3 +172,44 @@ export const ICON_PRESERVE_SELECTORS = [
   "[data-writing-block] .ProseMirror svg",
   "[data-writing-block] .ProseMirror svg *",
 ] as const;
+
+/**
+ * ChatGPT chrome surfaces (not conversation reading text). Add one surface
+ * at a time from authenticated DOM evidence. Planned later, not in this
+ * list until markup is verified: sidebar section titles, project names,
+ * menus, dialogs, settings, search results, tooltips.
+ */
+export const CHATGPT_UI_SURFACE_IDS = ["sidebar-chat-titles"] as const;
+
+export type ChatGptUiSurfaceId = (typeof CHATGPT_UI_SURFACE_IDS)[number];
+
+export type ChatGptUiSurface = {
+  readonly id: ChatGptUiSurfaceId;
+  readonly selectors: readonly string[];
+  readonly textDescendants: readonly string[];
+};
+
+/**
+ * Sidebar conversation titles. Verified against authenticated ChatGPT
+ * markup (2026-09): each row is `[data-sidebar-item="true"]` and the
+ * visible title is `[data-marquee-text="true"]`, with overflow/marquee
+ * implemented as nested spans. `dir="auto"` is present on the marquee
+ * but is a BiDi hint, not a font selector.
+ *
+ * Do not target generated classes such as `_NCija_viewport` /
+ * `_NCija_content`, Tailwind utilities, the row `<a>` itself, or the
+ * options button/SVG in the same item.
+ */
+export const SIDEBAR_CHAT_TITLE_SELECTORS = [
+  '[data-sidebar-item="true"] [data-marquee-text="true"]',
+] as const;
+
+export const SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS = ["span"] as const;
+
+export const CHATGPT_UI_SURFACES: readonly ChatGptUiSurface[] = [
+  {
+    id: "sidebar-chat-titles",
+    selectors: SIDEBAR_CHAT_TITLE_SELECTORS,
+    textDescendants: SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS,
+  },
+];
