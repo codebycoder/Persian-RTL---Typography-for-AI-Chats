@@ -11,6 +11,8 @@ import {
   COMPOSER_SELECTORS,
   CONVERSATION_READING_SELECTORS,
   ICON_PRESERVE_SELECTORS,
+  DIALOG_HEADING_SELECTORS,
+  DIALOG_HEADING_TEXT_DESCENDANTS,
   SIDEBAR_CHAT_TITLE_SELECTORS,
   SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS,
   BIDI_LEAF_SELECTORS,
@@ -90,9 +92,12 @@ test("user reading selectors are preserved across frontend generations", () => {
 test("sidebar title selectors use stable semantic attributes", () => {
   assert.deepEqual(SIDEBAR_CHAT_TITLE_SELECTORS, [
     '[data-sidebar-item="true"] [data-marquee-text="true"]',
+    '[data-thread-title-trigger="true"] [data-thread-title="true"]',
   ]);
   assert.ok(SIDEBAR_CHAT_TITLE_SELECTORS[0]?.includes('[data-sidebar-item="true"]'));
   assert.ok(SIDEBAR_CHAT_TITLE_SELECTORS[0]?.includes('[data-marquee-text="true"]'));
+  assert.ok(SIDEBAR_CHAT_TITLE_SELECTORS[1]?.includes('[data-thread-title-trigger="true"]'));
+  assert.ok(SIDEBAR_CHAT_TITLE_SELECTORS[1]?.includes('[data-thread-title="true"]'));
 });
 
 test("sidebar title selector generation covers the marquee and nested spans", () => {
@@ -100,6 +105,12 @@ test("sidebar title selector generation covers the marquee and nested spans", ()
 
   assert.ok(selectors.includes('[data-sidebar-item="true"] [data-marquee-text="true"]'));
   assert.ok(selectors.includes('[data-sidebar-item="true"] [data-marquee-text="true"] :is(span)'));
+  assert.ok(
+    selectors.includes('[data-thread-title-trigger="true"] [data-thread-title="true"]'),
+  );
+  assert.ok(
+    selectors.includes('[data-thread-title-trigger="true"] [data-thread-title="true"] :is(span)'),
+  );
   assert.deepEqual(SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS, ["span"]);
 });
 
@@ -127,17 +138,50 @@ test("sidebar title selectors do not target the options button or SVG", () => {
   for (const selector of selectors) {
     assert.equal(/\bbutton\b/.test(selector), false, `must not target button: ${selector}`);
     assert.equal(/\bsvg\b/.test(selector), false, `must not target svg: ${selector}`);
+    const isSidebarRowSelector =
+      selector.includes('[data-sidebar-item="true"]') ||
+      selector.includes('[data-thread-title-trigger="true"]');
     assert.equal(
-      selector.includes('[data-sidebar-item="true"]') && /(?:^|\s)a(?:\s|:|,|$)/.test(selector),
+      isSidebarRowSelector && /(?:^|\s)a(?:\s|:|,|$)/.test(selector),
       false,
       `must not restyle the row link: ${selector}`,
     );
   }
 });
 
-test("UI surface architecture lists sidebar titles and keeps conversation selectors separate", () => {
-  assert.equal(CHATGPT_UI_SURFACES.length, 1);
-  assert.equal(CHATGPT_UI_SURFACES[0]?.id, "sidebar-chat-titles");
+test("dialog heading selectors use the stable heading class and the title element", () => {
+  assert.deepEqual(DIALOG_HEADING_SELECTORS, [".heading-dialog"]);
+  assert.deepEqual(DIALOG_HEADING_TEXT_DESCENDANTS, ["h2"]);
+
+  const dialog = CHATGPT_UI_SURFACES.find((surface) => surface.id === "dialog-heading");
+  assert.ok(dialog, "expected a dialog-heading UiSurface");
+  assert.deepEqual([...dialog.selectors], [...DIALOG_HEADING_SELECTORS]);
+  assert.deepEqual([...dialog.textDescendants], [...DIALOG_HEADING_TEXT_DESCENDANTS]);
+
+  const selectors = buildUiSurfaceTextSelectors(
+    CHATGPT_UI_SURFACES.filter((surface) => surface.id === "dialog-heading"),
+  );
+
+  assert.deepEqual(selectors, [".heading-dialog", ".heading-dialog :is(h2)"]);
+});
+
+test("dialog heading selectors do not use hashed classes, Radix ids, or Tailwind utilities", () => {
+  const selectors = buildUiSurfaceTextSelectors(
+    CHATGPT_UI_SURFACES.filter((surface) => surface.id === "dialog-heading"),
+  ).join("\n");
+
+  assert.doesNotMatch(selectors, /body-ADRAW0|section-zmz5Xf|largeSection-|footer-laIpwZ|Root-wrAjJZ|Icon-X4VkKC/);
+  assert.doesNotMatch(selectors, /radix-_r_/);
+  assert.doesNotMatch(selectors, /\b(?:truncate|font-semibold|contents|text-xs|text-default|flex)\b/);
+  assert.doesNotMatch(selectors, /\b(?:button|svg|form)\b/);
+  assert.doesNotMatch(selectors, /share-destination-icon|text-codex-description/);
+});
+
+test("UI surface architecture lists sidebar titles and dialog headings separately from conversation text", () => {
+  assert.deepEqual(
+    CHATGPT_UI_SURFACES.map((surface) => surface.id),
+    ["sidebar-chat-titles", "dialog-heading"],
+  );
   assert.deepEqual([...CHATGPT_UI_SURFACES[0]?.selectors ?? []], [...SIDEBAR_CHAT_TITLE_SELECTORS]);
 
   for (const selector of CONVERSATION_READING_SELECTORS) {
@@ -145,6 +189,11 @@ test("UI surface architecture lists sidebar titles and keeps conversation select
       selector.includes("data-sidebar-item"),
       false,
       "conversation selectors must stay separate from sidebar chrome",
+    );
+    assert.equal(
+      selector.includes("heading-dialog"),
+      false,
+      "conversation selectors must stay separate from dialog headings",
     );
   }
 });

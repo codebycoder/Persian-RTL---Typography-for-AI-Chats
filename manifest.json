@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "شخصی‌ساز فونت چت",
+  "name": "راستا",
   "version": "0.2.0",
   "description": "فونت گفتگوهای چت‌جی‌پی‌تی و کلود را به سلیقهٔ خودت تغییر بده.",
   "permissions": ["storage"],
@@ -11,7 +11,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "شخصی‌ساز فونت چت",
+    "default_title": "راستا",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

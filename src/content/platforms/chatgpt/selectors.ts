@@ -262,9 +262,9 @@ export const ICON_PRESERVE_SELECTORS = [
  * ChatGPT chrome surfaces (not conversation reading text). Add one surface
  * at a time from authenticated DOM evidence. Planned later, not in this
  * list until markup is verified: sidebar section titles, project names,
- * menus, dialogs, settings, search results, tooltips.
+ * menus, dialog body copy, settings, search results, tooltips.
  */
-export const CHATGPT_UI_SURFACE_IDS = ["sidebar-chat-titles"] as const;
+export const CHATGPT_UI_SURFACE_IDS = ["sidebar-chat-titles", "dialog-heading"] as const;
 
 export type ChatGptUiSurfaceId = (typeof CHATGPT_UI_SURFACE_IDS)[number];
 
@@ -275,11 +275,19 @@ export type ChatGptUiSurface = {
 };
 
 /**
- * Sidebar conversation titles. Verified against authenticated ChatGPT
- * markup (2026-09): each row is `[data-sidebar-item="true"]` and the
- * visible title is `[data-marquee-text="true"]`, with overflow/marquee
- * implemented as nested spans. `dir="auto"` is present on the marquee
- * but is a BiDi hint, not a font selector.
+ * Sidebar conversation titles.
+ *
+ * Older authenticated markup (2026-09): each row is
+ * `[data-sidebar-item="true"]` and the visible title is
+ * `[data-marquee-text="true"]`, with overflow/marquee implemented as
+ * nested spans.
+ *
+ * Current thread-shell sidebar (verified live 2026-09): rows use class
+ * `sidebar-item` (no `data-sidebar-item`) and the title lives under
+ * `[data-thread-title-trigger="true"]` as `[data-thread-title="true"]`
+ * (still paired with `[data-marquee-text="true"]` on the same span).
+ *
+ * `dir="auto"` on the marquee is a BiDi hint, not a font selector.
  *
  * Do not target generated classes such as `_NCija_viewport` /
  * `_NCija_content`, Tailwind utilities, the row `<a>` itself, or the
@@ -287,14 +295,37 @@ export type ChatGptUiSurface = {
  */
 export const SIDEBAR_CHAT_TITLE_SELECTORS = [
   '[data-sidebar-item="true"] [data-marquee-text="true"]',
+  '[data-thread-title-trigger="true"] [data-thread-title="true"]',
 ] as const;
 
 export const SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS = ["span"] as const;
+
+/**
+ * Dialog title. Verified against authenticated ChatGPT markup (2026-09):
+ * the visible heading, including «پیشنهاد نام پروژه», is an `h2` inside
+ * `.heading-dialog`. The `h2` often uses `display: contents`, and the site
+ * may set `font-family` on the heading itself, so both the wrapper and the
+ * `h2` are targeted.
+ *
+ * The same dialog can contain share copy and action labels. Those strings
+ * in the verified markup are Latin and stay on the host face. Do not use
+ * CSS-module hashes (`body-*`, `section-*`, `largeSection-*`, `footer-*`,
+ * `Root-*`, `Icon-*`), Radix ids (`radix-_r_*`), or Tailwind utilities
+ * (`truncate`, `font-semibold`, `contents`, `text-xs`).
+ */
+export const DIALOG_HEADING_SELECTORS = [".heading-dialog"] as const;
+
+export const DIALOG_HEADING_TEXT_DESCENDANTS = ["h2"] as const;
 
 export const CHATGPT_UI_SURFACES: readonly ChatGptUiSurface[] = [
   {
     id: "sidebar-chat-titles",
     selectors: SIDEBAR_CHAT_TITLE_SELECTORS,
     textDescendants: SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS,
+  },
+  {
+    id: "dialog-heading",
+    selectors: DIALOG_HEADING_SELECTORS,
+    textDescendants: DIALOG_HEADING_TEXT_DESCENDANTS,
   },
 ];

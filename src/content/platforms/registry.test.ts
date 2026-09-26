@@ -13,6 +13,8 @@ const CHATGPT_DOM_TOKENS = [
   "data-message-role",
   "data-assistant-markdown",
   "data-sidebar-item",
+  "data-thread-title-trigger",
+  "data-thread-title",
   "data-marquee-text",
   "data-message-author-role",
   "data-user-message-copy",

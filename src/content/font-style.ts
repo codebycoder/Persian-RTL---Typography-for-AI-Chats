@@ -68,7 +68,8 @@ export const MARKDOWN_TEXT_DESCENDANTS = [
 ] as const;
 
 /**
- * Virtual family used only for UI chrome (sidebar titles today).
+ * Virtual family used only for UI chrome, such as sidebar titles and
+ * dialog headings.
  * `unicode-range` limits this face to Arabic/Persian glyphs so Latin
  * characters keep the host page's fallback stack.
  */

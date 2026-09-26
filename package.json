@@ -1,8 +1,8 @@
 {
-  "name": "chat-font-customizer",
+  "name": "rasta",
   "version": "0.2.0",
   "private": true,
-  "description": "Customize your ChatGPT reading experience.",
+  "description": "Rasta — customize your ChatGPT and Claude reading experience.",
   "type": "module",
   "packageManager": "pnpm@10.15.1",
   "scripts": {

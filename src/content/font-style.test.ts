@@ -235,10 +235,28 @@ test("sidebar CSS targets stable title attributes and nested title spans", () =>
 
   assert.match(selectors, /\[data-sidebar-item="true"\] \[data-marquee-text="true"\]/);
   assert.match(selectors, /\[data-sidebar-item="true"\] \[data-marquee-text="true"\] :is\(span\)/);
+  assert.match(selectors, /\[data-thread-title-trigger="true"\] \[data-thread-title="true"\]/);
   assert.match(
-    css,
-    /\[data-sidebar-item="true"\] \[data-marquee-text="true"\],\n\[data-sidebar-item="true"\] \[data-marquee-text="true"\] :is\(span\) \{\n {2}font-family:/,
+    selectors,
+    /\[data-thread-title-trigger="true"\] \[data-thread-title="true"\] :is\(span\)/,
   );
+  assert.match(css, /\[data-thread-title-trigger="true"\] \[data-thread-title="true"\]/);
+  assert.match(css, /\[data-sidebar-item="true"\] \[data-marquee-text="true"\]/);
+});
+
+test("dialog heading CSS uses the Persian-glyph stack on the stable title class", () => {
+  const css = fontCss();
+  const selectors = buildUiSurfaceSelectorList(chatgptAdapter);
+
+  assert.match(selectors, /\.heading-dialog/);
+  assert.match(selectors, /\.heading-dialog :is\(h2\)/);
+
+  const dialogBlock = css.split("}").find((block) => block.includes(".heading-dialog"));
+  assert.ok(dialogBlock, "expected a dialog heading font-family rule");
+  assert.match(dialogBlock, new RegExp(`font-family: "${PERSIAN_GLYPH_FONT_FAMILY_ALIAS}"`));
+  assert.match(dialogBlock, /ui-sans-serif/);
+  assert.doesNotMatch(dialogBlock, /"CFC Estedad"/);
+  assert.doesNotMatch(dialogBlock, /body-ADRAW0|radix-_r_|share-destination-icon/);
 });
 
 test("sidebar CSS does not use generated ChatGPT classes", () => {
@@ -252,12 +270,20 @@ test("sidebar CSS does not target the item options button or SVG", () => {
   const css = fontCss();
   const sidebarRules = css
     .split("}")
-    .filter((block) => block.includes("data-sidebar-item"))
+    .filter(
+      (block) =>
+        block.includes("data-sidebar-item") || block.includes("data-thread-title-trigger"),
+    )
     .join("}");
 
   assert.ok(sidebarRules.length > 0, "expected sidebar title rules");
   assert.doesNotMatch(sidebarRules, /\[data-sidebar-item="true"\][^\n{]*\bbutton\b/);
   assert.doesNotMatch(sidebarRules, /\[data-sidebar-item="true"\][^\n{]*\bsvg\b/);
+  assert.doesNotMatch(
+    sidebarRules,
+    /\[data-thread-title-trigger="true"\][^\n{]*\bbutton\b/,
+  );
+  assert.doesNotMatch(sidebarRules, /\[data-thread-title-trigger="true"\][^\n{]*\bsvg\b/);
 });
 
 test("Persian glyph faces use unicode-range so English can keep the UI fallback", () => {
@@ -277,7 +303,12 @@ test("Persian glyph faces use unicode-range so English can keep the UI fallback"
   assert.match(stack, /ui-sans-serif|system-ui|sans-serif/);
   assert.doesNotMatch(stack, /"CFC Estedad"|Peyda/);
 
-  const sidebarBlock = css.split("}").find((block) => block.includes("data-sidebar-item"));
+  const sidebarBlock = css
+    .split("}")
+    .find(
+      (block) =>
+        block.includes("data-sidebar-item") || block.includes("data-thread-title-trigger"),
+    );
   assert.ok(sidebarBlock, "expected a sidebar font-family rule");
   assert.match(sidebarBlock, new RegExp(`font-family: "${PERSIAN_GLYPH_FONT_FAMILY_ALIAS}"`));
   assert.match(sidebarBlock, /ui-sans-serif/);
@@ -560,6 +591,8 @@ test("regression: ChatGPT-generated CSS still contains its meaningful selectors 
     /\[data-writing-block-fullscreen-editor-region\],\n\[data-writing-block\] \.ProseMirror \{\n {2}font-family:/,
   );
   assert.match(css, /\[data-sidebar-item="true"\] \[data-marquee-text="true"\]/);
+  assert.match(css, /\[data-thread-title-trigger="true"\] \[data-thread-title="true"\]/);
+  assert.match(css, /\.heading-dialog :is\(h2\)/);
   assert.match(css, /:is\(pre, code, kbd, samp, tt\)/);
   assert.match(css, /\[data-message-author-role\] svg/);
   assertNoEmptySelectorRule(css);
