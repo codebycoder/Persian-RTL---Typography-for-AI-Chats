@@ -23,8 +23,8 @@ test("ChatGPT adapter identity and selector wiring", () => {
   assert.equal(chatgptAdapter.selectors.iconPreserve, ICON_PRESERVE_SELECTORS);
   assert.equal(chatgptAdapter.selectors.exclusions, COMPOSER_AND_CONTROL_EXCLUSIONS);
   assert.equal(chatgptAdapter.selectors.uiSurfaces, CHATGPT_UI_SURFACES);
-  assert.equal(chatgptAdapter.mount, undefined);
-  assert.equal(chatgptAdapter.unmount, undefined);
+  assert.equal(typeof chatgptAdapter.mount, "function");
+  assert.equal(typeof chatgptAdapter.unmount, "function");
 });
 
 test("ChatGPT adapter matches chatgpt.com hostnames only", () => {

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Chat Font Customizer",
+  "name": "شخصی‌ساز فونت چت",
   "version": "0.2.0",
-  "description": "Customize your ChatGPT reading experience.",
+  "description": "فونت گفتگوهای چت‌جی‌پی‌تی و کلود را به سلیقهٔ خودت تغییر بده.",
   "permissions": ["storage"],
   "icons": {
     "16": "icons/icon16.png",
@@ -11,7 +11,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Chat Font Customizer",
+    "default_title": "شخصی‌ساز فونت چت",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -25,6 +25,12 @@
       "matches": ["https://chatgpt.com/*", "https://claude.ai/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["fonts/*.ttf"],
+      "matches": ["https://chatgpt.com/*", "https://claude.ai/*"]
     }
   ]
 }

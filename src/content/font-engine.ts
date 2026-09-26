@@ -1,6 +1,5 @@
 import { INJECTED_STYLE_ELEMENT_ID } from "@shared/constants";
-import { getRegisteredFont } from "@shared/font-registry";
-import type { FontSettings } from "@shared/settings";
+import { resolveSettingsFont, type FontSettings } from "@shared/settings";
 import { buildConversationFontCss } from "./font-style";
 import type { PlatformAdapter } from "./platforms/types";
 import { createDocumentStyleHost, syncInjectedStyle, type StyleHost } from "./style-lifecycle";
@@ -28,7 +27,12 @@ export function applyFontSettingsToPage(
     return;
   }
 
-  const font = getRegisteredFont(settings.fontId);
-  const css = buildConversationFontCss(font, platform);
+  const font = resolveSettingsFont(settings);
+  const css = buildConversationFontCss(font, platform, (assetPath) => {
+    if (assetPath.startsWith("data:")) return assetPath;
+    return typeof chrome !== "undefined" && chrome.runtime?.id
+      ? chrome.runtime.getURL(assetPath)
+      : assetPath;
+  });
   syncInjectedStyle(host, INJECTED_STYLE_ELEMENT_ID, css);
 }

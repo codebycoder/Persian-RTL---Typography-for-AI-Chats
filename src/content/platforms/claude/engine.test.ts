@@ -30,6 +30,7 @@ import { claudeAdapter } from "./adapter";
 import {
   ASK_USER_TEXT_SPAN_SELECTOR,
   ASSISTANT_PROSE_ROOT,
+  ASSISTANT_TIMELINE_TEXT_SELECTOR,
   ASSISTANT_TURN_STATUS_CONTAINER,
   ASSISTANT_TURN_STATUS_ROOT,
   CLAUDE_COMPOSER_EDITOR,
@@ -37,7 +38,7 @@ import {
 } from "./selectors";
 
 function fontCss(): string {
-  return buildConversationFontCss(getRegisteredFont("peyda"), claudeAdapter);
+  return buildConversationFontCss(getRegisteredFont("estedad"), claudeAdapter);
 }
 
 function bidiCss(): string {
@@ -84,10 +85,12 @@ test("Claude adapter works with the generic font engine", () => {
   const css = fontCss();
 
   assert.match(css, /@font-face/);
-  assert.match(css, /src: local\(/);
+  assert.match(css, /src: url\(/);
+  assert.match(css, /local\(/);
   assert.match(css, /font-family:[\s\S]*!important/);
   assert.ok(css.includes(ASSISTANT_PROSE_ROOT));
   assert.ok(css.includes(USER_MESSAGE_ROOT));
+  assert.ok(css.includes('[data-skill-file-viewer="true"]'));
   assertNoEmptySelectorRule(css);
   assertNoMalformedSelectorList(css);
 });
@@ -101,7 +104,9 @@ test("Claude font CSS restyles Markdown descendants inside conversation roots", 
     );
     assert.match(
       css,
-      new RegExp(`:is\\([^)]*\\b${element}\\b[^)]*\\) \\{\\n  font-family:[^}]*!important`),
+      new RegExp(
+        `:is\\([^)]*\\b${element}\\b[^)]*\\)(?::not\\([^)]*\\))* \\{\\n  font-family:[^}]*!important`,
+      ),
     );
   }
 
@@ -267,6 +272,29 @@ test("Claude assistant TurnStatus CSS targets the morphing label and nested text
   assertNoAccidentalGlobalElementSelectors(css);
 });
 
+test("Claude thinking timeline CSS uses the conversation font on step paragraphs", () => {
+  const css = fontCss();
+  const conversationSelectors = buildUiSurfaceSelectorList(claudeAdapter, "conversation");
+  const glyphSelectors = buildUiSurfaceSelectorList(claudeAdapter, "glyphs");
+  const timelineBlock = css.split("}").find((block) => block.includes("data-timeline-text"));
+
+  assert.equal(conversationSelectors, ASSISTANT_TIMELINE_TEXT_SELECTOR);
+  assert.doesNotMatch(glyphSelectors, /data-timeline-text/);
+  assert.ok(timelineBlock, "expected a thinking timeline font-family rule");
+  assert.match(timelineBlock, /\[data-timeline-text\] :is\(p\)/);
+  assert.match(timelineBlock, /font-family: "CFC Estedad"/);
+  assert.match(timelineBlock, /!important/);
+  assert.doesNotMatch(timelineBlock, /CFC Persian Glyphs/);
+  assert.doesNotMatch(timelineBlock, /direction\s*:/);
+  assert.doesNotMatch(timelineBlock, /font-base|font-sans|standard-markdown|_blocks_/);
+  assert.notEqual(conversationSelectors.trim(), "[data-timeline-text]");
+  assert.notEqual(conversationSelectors.trim(), "p");
+
+  assert.doesNotMatch(css, /(?:^|\n)\s*p\s*\{/);
+  assert.doesNotMatch(bidiCss(), /data-timeline-text/);
+  assertNoAccidentalGlobalElementSelectors(css);
+});
+
 test("Claude Ask User input banner CSS targets text spans and excludes icons", () => {
   const css = fontCss();
   const selectors = buildUiSurfaceSelectorList(claudeAdapter);
@@ -299,7 +327,7 @@ test("Claude Ask User input banner CSS targets text spans and excludes icons", (
 });
 
 test("Claude Ask User Answers uses the Persian-glyph unicode-range stack so Latin keeps a fallback", () => {
-  const peyda = getRegisteredFont("peyda");
+  const peyda = getRegisteredFont("estedad");
   const faces = buildPersianGlyphFontFaceCss(peyda);
   const stack = buildUiSurfaceFontStack();
   const css = buildConversationFontCss(peyda, claudeAdapter);
@@ -313,20 +341,20 @@ test("Claude Ask User Answers uses the Persian-glyph unicode-range stack so Lati
 
   assert.match(stack, new RegExp(`^"${PERSIAN_GLYPH_FONT_FAMILY_ALIAS}"`));
   assert.match(stack, /ui-sans-serif|system-ui|sans-serif/);
-  assert.doesNotMatch(stack, /"CFC Peyda"|Peyda/);
+  assert.doesNotMatch(stack, /"CFC Estedad"|Peyda/);
 
   assert.ok(cardBlock, "expected a Claude Ask User Answers font-family rule");
   assert.match(cardBlock, /data-morph-key/);
   assert.match(cardBlock, new RegExp(`font-family: "${PERSIAN_GLYPH_FONT_FAMILY_ALIAS}"`));
   assert.match(cardBlock, /ui-sans-serif/);
-  assert.doesNotMatch(cardBlock, /"CFC Peyda"/);
+  assert.doesNotMatch(cardBlock, /"CFC Estedad"/);
   assert.doesNotMatch(cardBlock, /direction\s*:\s*rtl/);
   assert.doesNotMatch(cardBlock, /direction\s*:\s*ltr/);
   assert.doesNotMatch(cardBlock, /bidi-override/);
 });
 
 test("Claude sidebar titles use the Persian-glyph unicode-range stack so Latin keeps a fallback", () => {
-  const peyda = getRegisteredFont("peyda");
+  const peyda = getRegisteredFont("estedad");
   const faces = buildPersianGlyphFontFaceCss(peyda);
   const stack = buildUiSurfaceFontStack();
   const css = buildConversationFontCss(peyda, claudeAdapter);
@@ -340,12 +368,12 @@ test("Claude sidebar titles use the Persian-glyph unicode-range stack so Latin k
 
   assert.match(stack, new RegExp(`^"${PERSIAN_GLYPH_FONT_FAMILY_ALIAS}"`));
   assert.match(stack, /ui-sans-serif|system-ui|sans-serif/);
-  assert.doesNotMatch(stack, /"CFC Peyda"|Peyda/);
+  assert.doesNotMatch(stack, /"CFC Estedad"|Peyda/);
 
   assert.ok(sidebarBlock, "expected a Claude sidebar font-family rule");
   assert.match(sidebarBlock, new RegExp(`font-family: "${PERSIAN_GLYPH_FONT_FAMILY_ALIAS}"`));
   assert.match(sidebarBlock, /ui-sans-serif/);
-  assert.doesNotMatch(sidebarBlock, /"CFC Peyda"/);
+  assert.doesNotMatch(sidebarBlock, /"CFC Estedad"/);
 });
 
 test("Claude font CSS restyles fenced pre blocks and preserves inline monospace", () => {
@@ -368,11 +396,13 @@ test("Claude font CSS restyles fenced pre blocks and preserves inline monospace"
 
   const descendantRule = css.split("\n").find((line) => line.includes(":is(p,"));
   assert.ok(descendantRule, "expected a descendant :is(p, ...) rule");
+  assert.match(descendantRule, /\bspan\b/);
+  assert.match(descendantRule, /:not\(pre \*\):not\(code \*\)/);
 
-  for (const excluded of ["pre", "code", "kbd", "samp", "tt", "svg", "span"]) {
+  for (const excluded of ["pre", "code", "kbd", "samp", "tt", "svg"]) {
     assert.ok(
       !new RegExp(`:is\\([^)]*\\b${excluded}\\b[^)]*\\)`).test(descendantRule),
-      `descendant rule must not target ${excluded}`,
+      `descendant :is() list must not target ${excluded}`,
     );
   }
 });
@@ -402,6 +432,7 @@ test("applyFontSettingsToPage injects Claude conversation CSS through the generi
   assert.match(mounted[0]?.textContent ?? "", /data-testid="user-message"/);
   assert.match(mounted[0]?.textContent ?? "", /data-testid="ask-user-answers-card"/);
   assert.match(mounted[0]?.textContent ?? "", /data-morph-key/);
+  assert.match(mounted[0]?.textContent ?? "", /data-timeline-text/);
   assert.match(mounted[0]?.textContent ?? "", /data-testid="chat-input"/);
   assert.doesNotMatch(mounted[0]?.textContent ?? "", /data-message-author-role/);
   assert.doesNotMatch(mounted[0]?.textContent ?? "", /chat-input-send|chat-input-attach/);
@@ -497,7 +528,7 @@ test("Claude BiDi targets prose blocks and does not isolate inlines or wrappers"
 });
 
 test("ChatGPT-generated CSS remains free of Claude conversation selectors", () => {
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), chatgptAdapter);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), chatgptAdapter);
   const bidi = buildConversationBidiCss(chatgptAdapter);
 
   for (const output of [css, bidi]) {
@@ -512,6 +543,7 @@ test("ChatGPT-generated CSS remains free of Claude conversation selectors", () =
     assert.doesNotMatch(output, /data-rasttext-dir="ltr"/);
     assert.doesNotMatch(output, /data-testid="chat-input"/);
     assert.doesNotMatch(output, /data-morph-key/);
+    assert.doesNotMatch(output, /data-timeline-text/);
   }
 });
 
@@ -552,6 +584,9 @@ test("Claude Ask User Q/A surfaces use Claude direction plaintext BiDi without g
   assert.doesNotMatch(bidiSelectors, /ask-user-answers-card/);
   assert.doesNotMatch(bidi, /data-morph-key/);
   assert.doesNotMatch(bidiSelectors, /data-morph-key/);
+  assert.doesNotMatch(bidi, /data-timeline-text/);
+  assert.doesNotMatch(bidiSelectors, /data-timeline-text/);
+  assert.doesNotMatch(direction, /data-timeline-text/);
 
   const isLists = [...bidiSelectors.matchAll(/:is\(([^)]+)\)/g)].map((match) => match[1] ?? "");
   for (const list of isLists) {
@@ -575,6 +610,7 @@ test("Claude BiDi CSS preserves semantic code exclusions and stays off uncapture
   assert.doesNotMatch(css, /data-row-key/);
   assert.doesNotMatch(css, /data-testid="sidebar"/);
   assert.doesNotMatch(css, /data-morph-key/);
+  assert.doesNotMatch(css, /data-timeline-text/);
   assert.doesNotMatch(css, /data-perf-row-streaming/);
   assert.doesNotMatch(css, /#prompt-textarea/);
   assertNoAccidentalGlobalElementSelectors(css);

@@ -10,6 +10,8 @@ import {
   ASK_USER_TEXT_SPAN_SELECTOR,
   ASSISTANT_PROSE_ROOT,
   ASSISTANT_ROW_ROOT,
+  ASSISTANT_TIMELINE_TEXT_SELECTOR,
+  ASSISTANT_TIMELINE_TEXT_SELECTORS,
   ASSISTANT_TURN_STATUS_CONTAINER,
   ASSISTANT_TURN_STATUS_PLAINTEXT_BIDI_SELECTORS,
   ASSISTANT_TURN_STATUS_ROOT,
@@ -18,6 +20,7 @@ import {
   BIDI_LEAF_SELECTORS,
   CANVAS_EDITOR_SELECTORS,
   CLAUDE_COMPOSER_EDITOR,
+  CLAUDE_SKILL_FILE_VIEWER,
   CLAUDE_UI_SURFACES,
   CODE_FONT_SELECTORS,
   CODE_PRESERVE_SELECTORS,
@@ -93,6 +96,14 @@ test("Claude user selector uses the verified user-message root", () => {
   assert.ok(CONVERSATION_READING_SELECTORS.includes(USER_MESSAGE_ROOT));
 });
 
+test("Claude skill file viewer uses the verified data-skill-file-viewer root", () => {
+  assert.equal(CLAUDE_SKILL_FILE_VIEWER, '[data-skill-file-viewer="true"]');
+  assert.ok(CONVERSATION_READING_SELECTORS.includes(CLAUDE_SKILL_FILE_VIEWER));
+  assert.equal(isBidiWrapperSelector(CLAUDE_SKILL_FILE_VIEWER), true);
+  assert.doesNotMatch(CLAUDE_SKILL_FILE_VIEWER, /wiggle-file-content|prose-review-dockey/);
+  assert.doesNotMatch(CLAUDE_SKILL_FILE_VIEWER, /font-claude-response|standard-markdown|_blocks_/);
+});
+
 test("Claude selectors do not use generated classes or random IDs", () => {
   const selectors = allClaudeSelectors().join("\n");
 
@@ -111,6 +122,7 @@ test("Claude conversation selectors stay on verified roots and omit uncaptured c
   assert.doesNotMatch(selectors, /data-ask-user-input-banner/);
   assert.doesNotMatch(selectors, /ask-user-answers-card/);
   assert.doesNotMatch(selectors, /data-morph-key/);
+  assert.doesNotMatch(selectors, /data-timeline-text/);
   assert.doesNotMatch(selectors, /data-perf-row-streaming/);
   assert.doesNotMatch(selectors, /data-is-streaming/);
   assert.doesNotMatch(selectors, /data-sidebar-item/);
@@ -220,7 +232,13 @@ test("Claude sidebar titles stay separate from conversation reading selectors", 
 test("Claude Ask User Answers UiSurface exists and uses the verified answers-card root", () => {
   assert.deepEqual(
     CLAUDE_UI_SURFACES.map((surface) => surface.id),
-    ["sidebar-chat-titles", "ask-user-answers-card", "ask-user-input-banner", "assistant-turn-status"],
+    [
+      "sidebar-chat-titles",
+      "ask-user-answers-card",
+      "ask-user-input-banner",
+      "assistant-turn-status",
+      "assistant-timeline-text",
+    ],
   );
 
   const answersCard = CLAUDE_UI_SURFACES.find((surface) => surface.id === "ask-user-answers-card");
@@ -402,6 +420,84 @@ test("Claude assistant TurnStatus selectors stay on the morphing label and omit 
   }
 });
 
+test("Claude thinking timeline UiSurface targets step paragraphs with the conversation font", () => {
+  const timeline = CLAUDE_UI_SURFACES.find((surface) => surface.id === "assistant-timeline-text");
+
+  assert.ok(timeline, "expected an assistant-timeline-text UiSurface");
+  assert.equal(ASSISTANT_TIMELINE_TEXT_SELECTOR, "[data-timeline-text] :is(p)");
+  assert.deepEqual([...ASSISTANT_TIMELINE_TEXT_SELECTORS], [ASSISTANT_TIMELINE_TEXT_SELECTOR]);
+  assert.deepEqual([...timeline.selectors], [ASSISTANT_TIMELINE_TEXT_SELECTOR]);
+  assert.deepEqual([...timeline.textDescendants], []);
+  assert.equal(timeline.font, "conversation");
+
+  for (const surface of CLAUDE_UI_SURFACES) {
+    if (surface.id === "assistant-timeline-text") {
+      continue;
+    }
+
+    assert.equal(surface.font, undefined, `${surface.id} must keep the glyph stack`);
+  }
+});
+
+test("Claude thinking timeline selector generation stays on paragraphs inside the step", () => {
+  const selectors = buildUiSurfaceTextSelectors(
+    CLAUDE_UI_SURFACES.filter((surface) => surface.id === "assistant-timeline-text"),
+  );
+
+  assert.deepEqual(selectors, [ASSISTANT_TIMELINE_TEXT_SELECTOR]);
+  assert.equal(
+    selectors.some((selector) => selector.trim() === "[data-timeline-text]"),
+    false,
+    "must not restyle the step root; !font-base lives there and icons must stay untouched",
+  );
+  assert.equal(selectors.some((selector) => selector.trim() === "p"), false);
+});
+
+test("Claude thinking timeline selectors omit Tailwind, generated classes, and other surfaces", () => {
+  const selectors = [
+    ...ASSISTANT_TIMELINE_TEXT_SELECTORS,
+    ...buildUiSurfaceTextSelectors(
+      CLAUDE_UI_SURFACES.filter((surface) => surface.id === "assistant-timeline-text"),
+    ),
+  ];
+  const joined = selectors.join("\n");
+
+  for (const pattern of GENERATED_CLASS_PATTERNS) {
+    assert.doesNotMatch(joined, pattern);
+  }
+
+  assert.doesNotMatch(joined, /font-base|font-sans|group\/timeline-text|text-text-300/);
+  assert.doesNotMatch(joined, /standard-markdown|_blocks_|_r_[A-Za-z0-9]+_/);
+  assert.doesNotMatch(joined, /data-morph-key|ask-user-answers-card|data-ask-user-input-banner/);
+  assert.doesNotMatch(joined, /data-testid="sidebar"|data-testid="user-message"/);
+  assert.doesNotMatch(joined, />/);
+
+  for (const selector of selectors) {
+    assert.ok(selector.includes("[data-timeline-text]"));
+    assert.ok(selector.includes(":is(p)"));
+    assert.doesNotMatch(selector, /\.[A-Za-z_-]/);
+    assert.notEqual(selector.trim(), "[data-timeline-text]");
+    assert.notEqual(selector.trim(), "p");
+    assert.equal(/\bbutton\b/.test(selector), false, `must not target button: ${selector}`);
+    assert.equal(/\bspan\b/.test(selector), false, `must not target span: ${selector}`);
+    assert.equal(/\bsvg\b/.test(selector), false, `must not target svg: ${selector}`);
+  }
+});
+
+test("Claude thinking timeline stays separate from conversation reading and composer selectors", () => {
+  for (const selector of [
+    ...CONVERSATION_READING_SELECTORS,
+    ...BIDI_LEAF_SELECTORS,
+    ...COMPOSER_SELECTORS,
+  ]) {
+    assert.equal(
+      selector.includes("data-timeline-text"),
+      false,
+      "conversation/composer selectors must stay separate from thinking timeline text",
+    );
+  }
+});
+
 test("Claude assistant TurnStatus stays separate from conversation reading and composer selectors", () => {
   for (const selector of [
     ...CONVERSATION_READING_SELECTORS,
@@ -456,10 +552,12 @@ test("Claude code font and preservation use only generic semantic selectors", ()
 
   assert.ok(codeFont.includes(`${ASSISTANT_ROW_ROOT} pre`));
   assert.ok(codeFont.includes(`${USER_MESSAGE_ROOT} pre`));
+  assert.ok(codeFont.includes(`${CLAUDE_SKILL_FILE_VIEWER} pre`));
   assert.ok(codeFont.includes(`${CLAUDE_COMPOSER_EDITOR} pre`));
   assert.match(code, /:is\(code, kbd, samp, tt\)/);
   assert.ok(code.includes(`${ASSISTANT_ROW_ROOT} :is(code, kbd, samp, tt):not(pre *)`));
   assert.ok(code.includes(`${USER_MESSAGE_ROOT} :is(code, kbd, samp, tt)`));
+  assert.ok(code.includes(`${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt)`));
   assert.ok(code.includes(`${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt)`));
   assert.doesNotMatch(
     code,
@@ -471,6 +569,7 @@ test("Claude bidi leaf selectors omit conversation wrappers", () => {
   assert.deepEqual([...BIDI_LEAF_SELECTORS], []);
   assert.equal(isBidiWrapperSelector(ASSISTANT_PROSE_ROOT), true);
   assert.equal(isBidiWrapperSelector(USER_MESSAGE_ROOT), true);
+  assert.equal(isBidiWrapperSelector(CLAUDE_SKILL_FILE_VIEWER), true);
 
   for (const selector of CONVERSATION_READING_SELECTORS) {
     assert.equal(
@@ -486,6 +585,7 @@ test("Claude icon preservation stays on svg nodes and Ask User shells", () => {
 
   assert.ok(icons.includes(`${ASSISTANT_PROSE_ROOT} svg`));
   assert.ok(icons.includes(`${USER_MESSAGE_ROOT} svg`));
+  assert.ok(icons.includes(`${CLAUDE_SKILL_FILE_VIEWER} svg`));
   assert.ok(icons.includes(`${CLAUDE_COMPOSER_EDITOR} svg`));
   assert.ok(icons.includes('[data-testid="ask-user-answers-card"]'));
   assert.ok(icons.includes("[data-ask-user-input-banner]"));

@@ -4,10 +4,21 @@
  * engines.
  */
 
+/**
+ * `glyphs` keeps Latin on the host face and only swaps Persian/Arabic
+ * code points. `conversation` uses the same stack as message text.
+ */
+export type UiSurfaceFont = "glyphs" | "conversation";
+
 export type UiSurface = {
   readonly id: string;
   readonly selectors: readonly string[];
   readonly textDescendants: readonly string[];
+  /**
+   * Defaults to `glyphs`. Use `conversation` for reading prose that sits
+   * outside the conversation root, such as Claude's thinking timeline.
+   */
+  readonly font?: UiSurfaceFont;
 };
 
 export type PlatformSelectors = {

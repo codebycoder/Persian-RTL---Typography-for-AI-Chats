@@ -6,7 +6,9 @@ import {
   ASSISTANT_ROW_ROOT,
   ASSISTANT_TURN_STATUS_PLAINTEXT_BIDI_SELECTORS,
   CLAUDE_COMPOSER_EDITOR,
+  CLAUDE_SKILL_FILE_VIEWER,
   FENCED_CODE_BIDI_SELECTORS,
+  USER_MESSAGE_ROOT,
 } from "./selectors";
 
 /**
@@ -21,6 +23,8 @@ import {
  * Scope:
  * - logical text blocks inside authenticated assistant prose
  *   (`[data-testid="transcript-row"][data-perf-row="assistant"] [data-cds="Prose"]`)
+ * - logical text blocks inside the Skills / Outputs file viewer
+ *   (`[data-skill-file-viewer="true"]`)
  * - logical editable blocks inside the normal composer
  *   (`[data-testid="chat-input"][contenteditable="true"][role="textbox"]`)
  *
@@ -63,6 +67,8 @@ export const CLAUDE_DIRECTION_BLOCK_ELEMENTS = [
   "h4",
   "h5",
   "h6",
+  "ul",
+  "ol",
   "li",
   "blockquote",
   "th",
@@ -72,7 +78,7 @@ export const CLAUDE_DIRECTION_BLOCK_ELEMENTS = [
 /**
  * Verified composer blocks only. Do not guess ProseMirror node classes.
  */
-export const CLAUDE_COMPOSER_DIRECTION_BLOCKS = ["p", "li", "blockquote"] as const;
+export const CLAUDE_COMPOSER_DIRECTION_BLOCKS = ["p", "ul", "ol", "li", "blockquote"] as const;
 
 export type ResolvedBlockDirection = "rtl" | "ltr";
 
@@ -91,15 +97,18 @@ const COMPOSER_BLOCK_TAGS = new Set<string>(
 );
 const COMPOSER_BLOCK_SELECTOR = CLAUDE_COMPOSER_DIRECTION_BLOCKS.join(", ");
 const PLACEHOLDER_GHOST_ATTRIBUTE = "data-composer-placeholder-ghost";
+const LTR_LIST_TEXT_ATTRIBUTE = "data-rasttext-ltr-item";
 
 const PROSE_SELECTOR = '[data-cds="Prose"]';
 
 const ARABIC_LETTER = /\p{Script=Arabic}/u;
+const RTL_LETTER = /[\p{Script=Arabic}\p{Script=Hebrew}]/u;
 const LATIN_LETTER = /\p{Script=Latin}/u;
 const LETTER = /\p{L}/u;
 
 const pendingBlocks = new Set<Element>();
-const proseObservers = new Map<Element, MutationObserver>();
+/** Observers on assistant Prose roots and skill file-viewer roots. */
+const readingRootObservers = new Map<Element, MutationObserver>();
 
 let active = false;
 let mountedDoc: Document | null = null;
@@ -198,7 +207,16 @@ export function detectBlockDirection(text: string): ResolvedBlockDirection | nul
   return null;
 }
 
-export function getDetectableText(root: Element): string {
+function detectListDirection(text: string): ResolvedBlockDirection | null {
+  const letters = text.replace(/[^\p{L}]/gu, "");
+  if (RTL_LETTER.test(letters)) {
+    return "rtl";
+  }
+
+  return LETTER.test(text) ? "ltr" : null;
+}
+
+export function getDetectableText(root: Element, options: { skipLists?: boolean } = {}): string {
   if (CODE_EXCLUSION_TAGS.has(root.tagName) || isPlaceholderGhost(root)) {
     return "";
   }
@@ -217,6 +235,9 @@ export function getDetectableText(root: Element): string {
 
     const element = node as Element;
     if (CODE_EXCLUSION_TAGS.has(element.tagName) || isPlaceholderGhost(element)) {
+      return;
+    }
+    if (options.skipLists === true && isListElement(element)) {
       return;
     }
 
@@ -246,6 +267,24 @@ export function applyBlockDirection(element: Element, direction: ResolvedBlockDi
   }
 }
 
+function applyLtrListTextMarker(element: Element, enabled: boolean): void {
+  if (enabled) {
+    if (!element.hasAttribute(LTR_LIST_TEXT_ATTRIBUTE)) {
+      element.setAttribute(LTR_LIST_TEXT_ATTRIBUTE, "");
+    }
+    return;
+  }
+
+  if (element.hasAttribute(LTR_LIST_TEXT_ATTRIBUTE)) {
+    element.removeAttribute(LTR_LIST_TEXT_ATTRIBUTE);
+  }
+}
+
+function removeOwnedDirectionAttributes(element: Element): void {
+  element.removeAttribute(RASTTEXT_DIR_ATTRIBUTE);
+  element.removeAttribute(LTR_LIST_TEXT_ATTRIBUTE);
+}
+
 export function isAssistantProseRoot(element: Element): boolean {
   return (
     element.getAttribute("data-cds") === "Prose" &&
@@ -253,12 +292,20 @@ export function isAssistantProseRoot(element: Element): boolean {
   );
 }
 
+export function isSkillFileViewerRoot(element: Element): boolean {
+  return element.getAttribute("data-skill-file-viewer") === "true";
+}
+
+export function isDirectionReadingRoot(element: Element): boolean {
+  return isAssistantProseRoot(element) || isSkillFileViewerRoot(element);
+}
+
 export function isSupportedAssistantBlock(element: Element): boolean {
   if (!BLOCK_TAGS.has(element.tagName)) {
     return false;
   }
 
-  if (!isInsideAssistantProse(element)) {
+  if (!isInsideDirectionReadingRoot(element)) {
     return false;
   }
 
@@ -286,7 +333,7 @@ export function resolveAssistantBlock(element: Element): void {
     return;
   }
 
-  applyBlockDirection(element, detectBlockDirection(getDetectableText(element)));
+  resolveBlockAndListState(element);
 }
 
 export function isComposerEditor(element: Element): boolean {
@@ -326,7 +373,7 @@ export function resolveComposerBlock(element: Element): void {
     return;
   }
 
-  applyBlockDirection(element, detectBlockDirection(getDetectableText(element)));
+  resolveBlockAndListState(element);
 }
 
 /**
@@ -356,7 +403,17 @@ export function clearComposerDirectionState(editor: Element): void {
   applyBlockDirection(editor, null);
   const marked = editor.querySelectorAll(`[${RASTTEXT_DIR_ATTRIBUTE}]`);
   for (let index = 0; index < marked.length; index += 1) {
-    marked[index]?.removeAttribute(RASTTEXT_DIR_ATTRIBUTE);
+    const element = marked[index];
+    if (element) {
+      removeOwnedDirectionAttributes(element);
+    }
+  }
+  const ltrListText = editor.querySelectorAll(`[${LTR_LIST_TEXT_ATTRIBUTE}]`);
+  for (let index = 0; index < ltrListText.length; index += 1) {
+    const element = ltrListText[index];
+    if (element) {
+      removeOwnedDirectionAttributes(element);
+    }
   }
 }
 
@@ -368,13 +425,31 @@ export function buildClaudeDirectionCss(): string {
   ].join(",\n");
   const rtl = [
     `${ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
+    `${CLAUDE_SKILL_FILE_VIEWER} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
     `${CLAUDE_COMPOSER_EDITOR} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
     `${CLAUDE_COMPOSER_EDITOR}[${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
   ].join(",\n");
   const ltr = [
     `${ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
+    `${CLAUDE_SKILL_FILE_VIEWER} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
     `${CLAUDE_COMPOSER_EDITOR} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
     `${CLAUDE_COMPOSER_EDITOR}[${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
+  ].join(",\n");
+  const ltrListText = [
+    `${ASSISTANT_PROSE_ROOT} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
+    `${CLAUDE_SKILL_FILE_VIEWER} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
+    `${CLAUDE_COMPOSER_EDITOR} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
+  ].join(",\n");
+  const listSpacing = [
+    `${ASSISTANT_PROSE_ROOT} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
+    `${CLAUDE_SKILL_FILE_VIEWER} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
+    `${CLAUDE_COMPOSER_EDITOR} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
+  ].join(",\n");
+  const inlineCode = [
+    `${ASSISTANT_ROW_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
+    `${USER_MESSAGE_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
+    `${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt):not(pre *)`,
+    `${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt):not(pre *)`,
   ].join(",\n");
 
   return joinCssBlocks([
@@ -394,25 +469,52 @@ export function buildClaudeDirectionCss(): string {
       ltr,
       "  direction: ltr;\n  text-align: start !important;\n  unicode-bidi: normal;",
     ),
+    buildCssRule(
+      ltrListText,
+      "  unicode-bidi: plaintext !important;\n  text-align: right !important;",
+    ),
+    buildCssRule(
+      listSpacing,
+      "  padding-inline-start: 1.5em !important;\n  padding-inline-end: 0 !important;",
+    ),
+    buildCssRule(
+      inlineCode,
+      "  direction: ltr !important;\n  unicode-bidi: isolate !important;",
+    ),
   ]);
 }
 
 export function removeRastTextDirAttributes(root: ParentNode): void {
+  if ((root as Node).nodeType === ELEMENT_NODE) {
+    removeOwnedDirectionAttributes(root as Element);
+  }
+
   const marked = root.querySelectorAll(`[${RASTTEXT_DIR_ATTRIBUTE}]`);
   for (let index = 0; index < marked.length; index += 1) {
-    marked[index]?.removeAttribute(RASTTEXT_DIR_ATTRIBUTE);
+    const element = marked[index];
+    if (element) {
+      removeOwnedDirectionAttributes(element);
+    }
+  }
+  const ltrListText = root.querySelectorAll(`[${LTR_LIST_TEXT_ATTRIBUTE}]`);
+  for (let index = 0; index < ltrListText.length; index += 1) {
+    const element = ltrListText[index];
+    if (element) {
+      removeOwnedDirectionAttributes(element);
+    }
   }
 }
 
 /**
- * Idempotent setup. Observes assistant prose only (plus a childList
- * discovery observer so newly streamed rows can be attached). Does not
- * observe characterData on the whole document.
+ * Idempotent setup. Observes assistant prose and skill file-viewer roots
+ * (plus a childList discovery observer so newly streamed rows / opened
+ * panes can be attached). Does not observe characterData on the whole
+ * document.
  */
 export function mountClaudeDirection(doc: Document): void {
   if (active && mountedDoc === doc) {
     ensureDirectionStyle(doc);
-    scanExistingProse(doc);
+    scanExistingReadingRoots(doc);
     return;
   }
 
@@ -423,7 +525,7 @@ export function mountClaudeDirection(doc: Document): void {
   active = true;
   mountedDoc = doc;
   ensureDirectionStyle(doc);
-  scanExistingProse(doc);
+  scanExistingReadingRoots(doc);
   startDiscoveryObserver(doc);
 }
 
@@ -463,29 +565,102 @@ function nearestComposerEditor(element: Element): Element | null {
   return null;
 }
 
+function isListElement(element: Element): boolean {
+  return element.tagName === "UL" || element.tagName === "OL";
+}
+
+function nearestList(element: Element): Element | null {
+  let current: Element | null = element;
+  while (current) {
+    if (isListElement(current)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function isSupportedBlockInCurrentSurface(element: Element): boolean {
+  return isSupportedAssistantBlock(element) || isSupportedComposerBlock(element);
+}
+
+function resolveBlockAndListState(element: Element): void {
+  if (isListElement(element)) {
+    resolveList(element);
+    return;
+  }
+
+  const list = element.tagName === "LI" ? nearestList(element) : null;
+  if (!list || !isSupportedBlockInCurrentSurface(list)) {
+    applyLtrListTextMarker(element, false);
+    applyBlockDirection(element, detectBlockDirection(getDetectableText(element)));
+    return;
+  }
+
+  resolveList(list);
+}
+
+function resolveList(list: Element): void {
+  const listDirection = detectListDirection(getDetectableText(list));
+  applyBlockDirection(list, listDirection);
+
+  const items = list.querySelectorAll("li");
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (!item || !isSupportedBlockInCurrentSurface(item)) {
+      continue;
+    }
+
+    const itemList = nearestList(item);
+    const direction =
+      itemList === list ? listDirection : detectListDirection(getDetectableText(itemList ?? item));
+    applyBlockDirection(item, direction);
+    applyLtrListTextMarker(
+      item,
+      direction === "rtl" && detectBlockDirection(getDetectableText(item, { skipLists: true })) === "ltr",
+    );
+  }
+}
+
 function isInsideAssistantProse(element: Element): boolean {
   const prose = element.closest(PROSE_SELECTOR);
   return prose !== null && isAssistantProseRoot(prose);
 }
 
-function scanExistingProse(doc: Document): void {
+function isInsideSkillFileViewer(element: Element): boolean {
+  return element.closest(CLAUDE_SKILL_FILE_VIEWER) !== null;
+}
+
+function isInsideDirectionReadingRoot(element: Element): boolean {
+  return isInsideAssistantProse(element) || isInsideSkillFileViewer(element);
+}
+
+function scanExistingReadingRoots(doc: Document): void {
   const proseNodes = doc.querySelectorAll(ASSISTANT_PROSE_ROOT);
   for (let index = 0; index < proseNodes.length; index += 1) {
-    const prose = proseNodes[index];
-    if (prose) {
-      attachProseObserver(prose);
+    const root = proseNodes[index];
+    if (root) {
+      attachReadingRootObserver(root);
+    }
+  }
+
+  const viewerNodes = doc.querySelectorAll(CLAUDE_SKILL_FILE_VIEWER);
+  for (let index = 0; index < viewerNodes.length; index += 1) {
+    const root = viewerNodes[index];
+    if (root) {
+      attachReadingRootObserver(root);
     }
   }
 }
 
-function attachProseObserver(prose: Element): void {
-  if (!active || proseObservers.has(prose)) {
-    resolveProseBlocks(prose);
+function attachReadingRootObserver(root: Element): void {
+  if (!active || readingRootObservers.has(root)) {
+    resolveReadingRootBlocks(root);
     return;
   }
 
   if (typeof MutationObserver !== "function") {
-    resolveProseBlocks(prose);
+    resolveReadingRootBlocks(root);
     return;
   }
 
@@ -497,18 +672,18 @@ function attachProseObserver(prose: Element): void {
     collectBlocksFromMutations(mutations);
   });
 
-  observer.observe(prose, {
+  observer.observe(root, {
     subtree: true,
     childList: true,
     characterData: true,
   });
 
-  proseObservers.set(prose, observer);
-  resolveProseBlocks(prose);
+  readingRootObservers.set(root, observer);
+  resolveReadingRootBlocks(root);
 }
 
-function resolveProseBlocks(prose: Element): void {
-  const blocks = prose.querySelectorAll(BLOCK_SELECTOR);
+function resolveReadingRootBlocks(root: Element): void {
+  const blocks = root.querySelectorAll(BLOCK_SELECTOR);
   for (let index = 0; index < blocks.length; index += 1) {
     const block = blocks[index];
     if (block) {
@@ -651,7 +826,7 @@ function startDiscoveryObserver(doc: Document): void {
       for (let index = 0; index < added.length; index += 1) {
         const node = added[index];
         if (node) {
-          attachProseInTree(node);
+          attachReadingRootsInTree(node);
         }
       }
 
@@ -659,7 +834,7 @@ function startDiscoveryObserver(doc: Document): void {
       for (let index = 0; index < removed.length; index += 1) {
         const node = removed[index];
         if (node) {
-          detachProseInTree(node);
+          detachReadingRootsInTree(node);
         }
       }
     }
@@ -668,21 +843,21 @@ function startDiscoveryObserver(doc: Document): void {
   discoveryObserver.observe(root, { childList: true, subtree: true });
 }
 
-function attachProseInTree(node: Node): void {
-  for (const prose of collectAssistantProse(node)) {
-    attachProseObserver(prose);
+function attachReadingRootsInTree(node: Node): void {
+  for (const root of collectDirectionReadingRoots(node)) {
+    attachReadingRootObserver(root);
   }
 }
 
-function detachProseInTree(node: Node): void {
-  for (const prose of collectAssistantProse(node)) {
-    const observer = proseObservers.get(prose);
+function detachReadingRootsInTree(node: Node): void {
+  for (const root of collectDirectionReadingRoots(node)) {
+    const observer = readingRootObservers.get(root);
     observer?.disconnect();
-    proseObservers.delete(prose);
+    readingRootObservers.delete(root);
   }
 }
 
-function collectAssistantProse(node: Node): Element[] {
+function collectDirectionReadingRoots(node: Node): Element[] {
   if (node.nodeType !== ELEMENT_NODE) {
     return [];
   }
@@ -690,14 +865,22 @@ function collectAssistantProse(node: Node): Element[] {
   const element = node as Element;
   const found: Element[] = [];
 
-  if (isAssistantProseRoot(element)) {
+  if (isDirectionReadingRoot(element)) {
     found.push(element);
   }
 
-  const nested = element.querySelectorAll(PROSE_SELECTOR);
-  for (let index = 0; index < nested.length; index += 1) {
-    const candidate = nested[index];
+  const nestedProse = element.querySelectorAll(PROSE_SELECTOR);
+  for (let index = 0; index < nestedProse.length; index += 1) {
+    const candidate = nestedProse[index];
     if (candidate && isAssistantProseRoot(candidate)) {
+      found.push(candidate);
+    }
+  }
+
+  const nestedViewers = element.querySelectorAll(CLAUDE_SKILL_FILE_VIEWER);
+  for (let index = 0; index < nestedViewers.length; index += 1) {
+    const candidate = nestedViewers[index];
+    if (candidate && isSkillFileViewerRoot(candidate) && candidate !== element) {
       found.push(candidate);
     }
   }
@@ -709,10 +892,10 @@ function stopObservers(): void {
   discoveryObserver?.disconnect();
   discoveryObserver = null;
 
-  for (const observer of proseObservers.values()) {
+  for (const observer of readingRootObservers.values()) {
     observer.disconnect();
   }
-  proseObservers.clear();
+  readingRootObservers.clear();
 }
 
 function ensureDirectionStyle(doc: Document): void {

@@ -122,7 +122,7 @@ export async function detectFontAvailability(
     return { status: "likely-available", matchedCandidate };
   }
 
-  const localNames = font.localFaceNames.flatMap((face) => face.localNames);
+  const localNames = font.faces.flatMap((face) => face.localNames);
   const loadResults = await Promise.all(localNames.map((name) => localFaceLoads(name)));
   const anyLoaded = loadResults.some((result) => result === true);
   const anyUnknown = loadResults.some((result) => result === null);

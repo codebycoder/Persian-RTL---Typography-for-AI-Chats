@@ -28,8 +28,8 @@ test("Claude composer lifecycle is event-driven and does not observe the whole d
 test("platform support mount and unmount stay wired through the Claude adapter", () => {
   assert.equal(typeof claudeAdapter.mount, "function");
   assert.equal(typeof claudeAdapter.unmount, "function");
-  assert.equal(chatgptAdapter.mount, undefined);
-  assert.equal(chatgptAdapter.unmount, undefined);
+  assert.equal(typeof chatgptAdapter.mount, "function");
+  assert.equal(typeof chatgptAdapter.unmount, "function");
   assert.equal(typeof mountClaudePlatformSupport, "function");
   assert.equal(typeof unmountClaudePlatformSupport, "function");
 });

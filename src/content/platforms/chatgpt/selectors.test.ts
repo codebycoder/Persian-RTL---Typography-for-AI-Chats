@@ -3,8 +3,10 @@ import { test } from "node:test";
 import { buildUiSurfaceTextSelectors } from "../types";
 import {
   CANVAS_EDITOR_SELECTORS,
+  CHATGPT_FILE_VIEWER_PANEL,
   CHATGPT_UI_SURFACES,
   CODE_PRESERVE_SELECTORS,
+  CHATGPT_COMPOSER_EDITOR,
   COMPOSER_AND_CONTROL_EXCLUSIONS,
   COMPOSER_SELECTORS,
   CONVERSATION_READING_SELECTORS,
@@ -29,7 +31,27 @@ function allChatGptSelectors(): string[] {
 }
 
 test("assistant reading selectors are preserved across frontend generations", () => {
+  assert.ok(
+    CONVERSATION_READING_SELECTORS.includes('[data-markdown-text-style="assistant-message"]'),
+  );
+  assert.ok(CONVERSATION_READING_SELECTORS.includes('[data-user-message-bubble="true"]'));
+  assert.ok(
+    CONVERSATION_READING_SELECTORS.includes(
+      '[data-user-message-bubble="true"] .whitespace-pre-wrap',
+    ),
+  );
+  assert.ok(CONVERSATION_READING_SELECTORS.includes(CHATGPT_FILE_VIEWER_PANEL));
+  assert.deepEqual(
+    [...CANVAS_EDITOR_SELECTORS],
+    ["[data-writing-block-fullscreen-editor-region]", "[data-writing-block] .ProseMirror"],
+  );
   assert.ok(CONVERSATION_READING_SELECTORS.includes('[data-message-author-role="assistant"] .markdown'));
+  assert.ok(CONVERSATION_READING_SELECTORS.includes('[data-message-author-role="assistant"] .prose'));
+  assert.ok(
+    CONVERSATION_READING_SELECTORS.includes(
+      '[data-message-author-role="assistant"] [data-message-content]',
+    ),
+  );
   assert.ok(
     CONVERSATION_READING_SELECTORS.includes(
       '[data-message-author-role="assistant"] [data-assistant-markdown]',
@@ -137,8 +159,13 @@ test("UI surface selector generation does not emit a global or subtree-wide * ru
 });
 
 test("code and composer exclusions remain present", () => {
-  assert.deepEqual([...COMPOSER_SELECTORS], ["#prompt-textarea"]);
+  assert.deepEqual([...COMPOSER_SELECTORS], ["#prompt-textarea", CHATGPT_COMPOSER_EDITOR]);
+  assert.equal(
+    CHATGPT_COMPOSER_EDITOR,
+    '[data-composer-markdown][contenteditable="true"][role="textbox"]',
+  );
   assert.ok(COMPOSER_AND_CONTROL_EXCLUSIONS.includes("#prompt-textarea"));
+  assert.ok(COMPOSER_AND_CONTROL_EXCLUSIONS.includes(CHATGPT_COMPOSER_EDITOR));
   assert.ok(COMPOSER_AND_CONTROL_EXCLUSIONS.includes("textarea"));
   assert.ok(COMPOSER_AND_CONTROL_EXCLUSIONS.includes("input"));
   assert.ok(COMPOSER_AND_CONTROL_EXCLUSIONS.includes('[contenteditable="true"]'));
@@ -146,20 +173,44 @@ test("code and composer exclusions remain present", () => {
 
   const code = CODE_PRESERVE_SELECTORS.join("\n");
   assert.match(code, /:is\(pre, code, kbd, samp, tt\)/);
+  assert.match(code, /\[data-markdown-text-style="assistant-message"\] :is\(pre, code, kbd, samp, tt\)/);
+  assert.match(code, /\[role="tabpanel"\]\[data-tab-id\^="chatgpt-file:"\] :is\(pre, code, kbd, samp, tt\)/);
+  assert.match(code, /\[data-markdown-copy="inline-code"\]/);
   assert.match(code, /\[data-message-author-role\] \.markdown :is\(pre, code, kbd, samp, tt\)/);
   assert.match(code, /\[data-message-role\] \[data-assistant-markdown\] :is\(pre, code, kbd, samp, tt\)/);
   assert.match(code, /\[data-dil-widget-copy-target\] \[data-d-component="code"\]/);
   assert.match(code, /\[data-writing-block-fullscreen-editor-region\] :is\(pre, code, kbd, samp, tt\)/);
+  assert.match(code, /\[data-composer-markdown\]\[contenteditable="true"\]\[role="textbox"\] :is\(pre, code, kbd, samp, tt\)/);
+});
+
+test("current composer selector uses stable attributes, not hashed classes", () => {
+  const selectors = [...COMPOSER_SELECTORS, ...CODE_PRESERVE_SELECTORS].join("\n");
+
+  assert.match(selectors, /\[data-composer-markdown\]/);
+  assert.doesNotMatch(selectors, /RichTextInput-|composer-NYb0tQ|composerTables-|composerHorizontalRules-/);
+  assert.doesNotMatch(selectors, /aria-label|data-virtualkeyboard|data-rich-text-layout/);
+  assert.doesNotMatch(COMPOSER_SELECTORS.join("\n"), /\.ProseMirror/);
 });
 
 test("bidi leaf selectors exclude markdown wrappers", () => {
   assert.ok(BIDI_LEAF_SELECTORS.includes('[data-message-role="user"] [data-user-message-copy]'));
   assert.ok(BIDI_LEAF_SELECTORS.includes('[data-message-author-role="user"] .whitespace-pre-wrap'));
+  assert.ok(BIDI_LEAF_SELECTORS.includes('[data-user-message-bubble="true"]'));
+  assert.equal(
+    BIDI_LEAF_SELECTORS.includes('[data-markdown-text-style="assistant-message"]'),
+    false,
+  );
+  assert.equal(BIDI_LEAF_SELECTORS.includes(CHATGPT_FILE_VIEWER_PANEL), false);
 
   for (const selector of BIDI_LEAF_SELECTORS) {
     assert.equal(selector.includes(".markdown"), false, `wrapper must not be a leaf: ${selector}`);
     assert.equal(
       selector.includes("[data-assistant-markdown]"),
+      false,
+      `wrapper must not be a leaf: ${selector}`,
+    );
+    assert.equal(
+      selector.includes("[data-markdown-text-style]"),
       false,
       `wrapper must not be a leaf: ${selector}`,
     );

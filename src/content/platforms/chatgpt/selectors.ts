@@ -44,21 +44,60 @@
  *    `font-family` directly on Markdown descendants, so the descendant rule
  *    applies here as well.
  *
- * The prompt composer (`#prompt-textarea`, typically a ProseMirror
- * contenteditable) sits outside message-role nodes. Reading selectors
- * below still exclude it and other controls; a dedicated composer rule
- * restyles that prompt editor. ChatGPT Canvas uses a separate ProseMirror
- * writing-block editor (`[data-writing-block-fullscreen-editor-region]`,
- * including the inline layout) and is restyled by its own rule.
+ * 6. Thread shell frontend (verified live 2026-09 on chatgpt.com Work):
+ *    turns use `data-turn-key`, user bubbles are
+ *    `[data-user-message-bubble="true"]` with
+ *    `.text-size-chat.whitespace-pre-wrap`, and assistant Markdown is
+ *    `[data-markdown-text-style="assistant-message"]` (hashed classes such
+ *    as `MarkdownRoot-*` / `Paragraph-*` must not be selectors). Ordinary
+ *    assistant text is wrapped in many `span` nodes; there is no
+ *    `data-message-author-role`, `.markdown`, or `.prose` on this markup.
+ *
+ * 7. File / document viewer (Canvas-adjacent, verified live 2026-09):
+ *    opening a generated `.md` opens a right `role="tabpanel"` whose
+ *    `data-tab-id` starts with `chatgpt-file:`. Body text is MarkdownRoot
+ *    without `data-markdown-text-style`. Stable hook is the tabpanel id
+ *    prefix — not hashed `MarkdownRoot-*` / `header-*` classes.
+ *
+ * The prompt composer sits outside message-role nodes. Older frontends
+ * use `#prompt-textarea`. The current logged-in composer (verified
+ * 2026-09) is a ProseMirror textbox with `data-composer-markdown` inside
+ * `[data-composer-input-layout]` / `[data-rich-text-layout]`. Reading
+ * selectors below still exclude it and other controls; a dedicated
+ * composer rule restyles that prompt editor. Classic Canvas writing-block
+ * editors (`[data-writing-block-fullscreen-editor-region]`,
+ * `[data-writing-block] .ProseMirror`) are restyled by their own rule.
+ * Hashed classes such as `RichTextInput-*` and `composer-*` are not
+ * selectors.
  *
  * Manual verification: see README "Manual DOM verification".
  */
 
+/**
+ * Right-hand file / document viewer opened from chat Outputs.
+ * Verified live 2026-09: `data-tab-id` values look like
+ * `chatgpt-file:<conversationId>:...:<fileName>`.
+ */
+export const CHATGPT_FILE_VIEWER_PANEL =
+  '[role="tabpanel"][data-tab-id^="chatgpt-file:"]';
+
 export const CONVERSATION_READING_SELECTORS = [
+  // Thread shell frontend (verified live 2026-09 on chatgpt.com Work).
+  '[data-markdown-text-style="assistant-message"]',
+  '[data-user-message-bubble="true"]',
+  '[data-user-message-bubble="true"] .whitespace-pre-wrap',
+  // File / document viewer (Canvas-adjacent Outputs panel).
+  CHATGPT_FILE_VIEWER_PANEL,
   // Classic frontend. User messages confirmed working with these selectors.
   '[data-message-author-role="assistant"] .markdown',
+  '[data-message-author-role="assistant"] .prose',
   '[data-message-author-role="user"] .markdown',
+  '[data-message-author-role="user"] .prose',
   '[data-message-author-role="user"] .whitespace-pre-wrap',
+  // Message content wrapper used by some ChatGPT builds when `.markdown`
+  // is absent or nested differently.
+  '[data-message-author-role="assistant"] [data-message-content]',
+  '[data-message-author-role="user"] [data-message-content]',
   // Logged-in hybrid (verified 2026-09): turns still expose
   // `data-message-author-role`, but assistant Markdown now renders in
   // `[data-assistant-markdown]` without a `.markdown` ancestor. Neither the
@@ -89,14 +128,46 @@ export const CONVERSATION_READING_SELECTORS = [
  * wrapper would give the whole message one inferred base direction.
  */
 export function isBidiWrapperSelector(selector: string): boolean {
-  return selector.includes(".markdown") || selector.includes("[data-assistant-markdown]");
+  return (
+    selector.includes(".markdown") ||
+    selector.includes("[data-assistant-markdown]") ||
+    // Match both `[data-markdown-text-style]` and
+    // `[data-markdown-text-style="assistant-message"]`.
+    selector.includes("[data-markdown-text-style") ||
+    // File viewer tabpanel wraps many Markdown blocks.
+    selector.includes('data-tab-id^="chatgpt-file:"') ||
+    selector.includes(CHATGPT_FILE_VIEWER_PANEL)
+  );
 }
 
 export const BIDI_LEAF_SELECTORS = CONVERSATION_READING_SELECTORS.filter(
   (selector) => !isBidiWrapperSelector(selector),
 );
 
+/**
+ * Current logged-in prompt editor (verified 2026-09). The text lives in
+ * a ProseMirror contenteditable:
+ *
+ * `[data-composer-input-layout]` > `.ProseMirror[data-composer-markdown][role="textbox"]`
+ *
+ * `data-composer-markdown` is the stable hook. Do not use hashed classes
+ * (`RichTextInput-*`, `composer-*`), `aria-label`, or a bare `.ProseMirror`
+ * — Canvas writing-blocks are also ProseMirror and have their own selectors.
+ */
+export const CHATGPT_COMPOSER_EDITOR =
+  '[data-composer-markdown][contenteditable="true"][role="textbox"]';
+
 export const CODE_PRESERVE_SELECTORS = [
+  // Thread shell frontend (verified 2026-09): inline code uses
+  // `data-markdown-copy="inline-code"`; fenced blocks still use pre/code.
+  '[data-markdown-text-style="assistant-message"] :is(pre, code, kbd, samp, tt)',
+  '[data-markdown-text-style="assistant-message"] :is(pre, code, kbd, samp, tt) *',
+  `${CHATGPT_FILE_VIEWER_PANEL} :is(pre, code, kbd, samp, tt)`,
+  `${CHATGPT_FILE_VIEWER_PANEL} :is(pre, code, kbd, samp, tt) *`,
+  `${CHATGPT_FILE_VIEWER_PANEL} [data-markdown-copy="inline-code"]`,
+  `${CHATGPT_FILE_VIEWER_PANEL} [data-markdown-copy="inline-code"] *`,
+  '[data-markdown-copy="inline-code"]',
+  '[data-markdown-copy="inline-code"] *',
   '[data-message-author-role] .markdown :is(pre, code, kbd, samp, tt)',
   '[data-message-author-role] .markdown :is(pre, code, kbd, samp, tt) *',
   '[data-message-author-role] [data-assistant-markdown] :is(pre, code, kbd, samp, tt)',
@@ -111,16 +182,16 @@ export const CODE_PRESERVE_SELECTORS = [
   "[data-writing-block-fullscreen-editor-region] :is(pre, code, kbd, samp, tt) *",
   "[data-writing-block] .ProseMirror :is(pre, code, kbd, samp, tt)",
   "[data-writing-block] .ProseMirror :is(pre, code, kbd, samp, tt) *",
+  `${CHATGPT_COMPOSER_EDITOR} :is(pre, code, kbd, samp, tt)`,
+  `${CHATGPT_COMPOSER_EDITOR} :is(pre, code, kbd, samp, tt) *`,
 ] as const;
 
 /**
- * Prompt composer only. ChatGPT's current editor is a ProseMirror
- * `div#prompt-textarea[contenteditable]`; older frontends use a
- * `textarea#prompt-textarea`. Do not broaden this to every
- * contenteditable — Canvas writing-blocks also use ProseMirror and
- * have their own selectors.
+ * Prompt composer only. Older frontends use `#prompt-textarea` (a
+ * ProseMirror contenteditable or a `textarea`). The current editor is
+ * `CHATGPT_COMPOSER_EDITOR`. Do not broaden this to every contenteditable.
  */
-export const COMPOSER_SELECTORS = ["#prompt-textarea"] as const;
+export const COMPOSER_SELECTORS = ["#prompt-textarea", CHATGPT_COMPOSER_EDITOR] as const;
 
 /**
  * ChatGPT Canvas / writing-block document editor.
@@ -133,6 +204,10 @@ export const COMPOSER_SELECTORS = ["#prompt-textarea"] as const;
  * writing-blocks in assistant turns wrap `.ProseMirror` in
  * `[data-writing-block]`.
  *
+ * The newer Outputs file viewer is read-only Markdown inside
+ * {@link CHATGPT_FILE_VIEWER_PANEL} and lives in
+ * `CONVERSATION_READING_SELECTORS`, not here.
+ *
  * Restyled separately from conversation reading text because these
  * nodes are contenteditable and would otherwise be excluded by
  * COMPOSER_AND_CONTROL_EXCLUSIONS. Do not replace this with a generic
@@ -143,6 +218,9 @@ export const CANVAS_EDITOR_SELECTORS = [
   "[data-writing-block] .ProseMirror",
 ] as const;
 
+/** Selector list used to recognize managed Canvas editors for BiDi. */
+export const CANVAS_EDITOR_ROOT_SELECTOR = CANVAS_EDITOR_SELECTORS.join(", ");
+
 /**
  * Reading-text exclusions. The composer and Canvas editors are restyled
  * separately; these `:not()` clauses keep conversation rules off the
@@ -150,6 +228,7 @@ export const CANVAS_EDITOR_SELECTORS = [
  */
 export const COMPOSER_AND_CONTROL_EXCLUSIONS = [
   "#prompt-textarea",
+  CHATGPT_COMPOSER_EDITOR,
   '[contenteditable="true"]',
   '[contenteditable="plaintext-only"]',
   "textarea",
@@ -159,6 +238,12 @@ export const COMPOSER_AND_CONTROL_EXCLUSIONS = [
 ] as const;
 
 export const ICON_PRESERVE_SELECTORS = [
+  '[data-markdown-text-style="assistant-message"] svg',
+  '[data-markdown-text-style="assistant-message"] svg *',
+  `${CHATGPT_FILE_VIEWER_PANEL} svg`,
+  `${CHATGPT_FILE_VIEWER_PANEL} svg *`,
+  "[data-user-message-bubble] svg",
+  "[data-user-message-bubble] svg *",
   "[data-message-author-role] svg",
   "[data-message-author-role] svg *",
   "[data-message-role] svg",

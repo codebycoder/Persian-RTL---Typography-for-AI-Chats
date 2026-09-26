@@ -1,4 +1,4 @@
-import { copyFileSync } from "node:fs";
+import { copyFileSync, cpSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, build, type Plugin } from "vite";
@@ -48,6 +48,7 @@ function buildExtensionExtras(): Plugin {
       });
 
       copyFileSync(resolve(rootDir, "manifest.json"), resolve(distDir, "manifest.json"));
+      cpSync(resolve(rootDir, "fonts"), resolve(distDir, "fonts"), { recursive: true });
     },
   };
 }

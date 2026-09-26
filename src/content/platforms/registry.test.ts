@@ -29,6 +29,7 @@ const CLAUDE_DOM_TOKENS = [
   "ask-user-answers-card",
   "ask-user-input-banner",
   "data-morph-key",
+  "data-timeline-text",
   'data-testid="chat-input"',
 ];
 
@@ -118,6 +119,26 @@ test("Claude composer selector knowledge stays under platforms/claude/", () => {
 
 test("Claude Ask User Answers selector knowledge stays under platforms/claude/", () => {
   const token = "ask-user-answers-card";
+  const forbidden = [
+    "font-style.ts",
+    "bidi-style.ts",
+    "font-engine.ts",
+    "platforms/types.ts",
+    "platforms/chatgpt/adapter.ts",
+    "platforms/chatgpt/selectors.ts",
+  ] as const;
+
+  for (const file of forbidden) {
+    assert.equal(
+      readContentSource(file).includes(token),
+      false,
+      `${file} must not contain ${token}`,
+    );
+  }
+});
+
+test("Claude thinking timeline selector knowledge stays under platforms/claude/", () => {
+  const token = "data-timeline-text";
   const forbidden = [
     "font-style.ts",
     "bidi-style.ts",

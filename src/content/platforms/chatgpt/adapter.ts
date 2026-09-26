@@ -1,3 +1,4 @@
+import { mountChatGptDirection, unmountChatGptDirection } from "./direction";
 import type { PlatformAdapter } from "../types";
 import {
   BIDI_LEAF_SELECTORS,
@@ -19,6 +20,8 @@ export function matchesChatGptHostname(hostname: string): boolean {
 
 export const chatgptAdapter: PlatformAdapter = {
   id: CHATGPT_PLATFORM_ID,
+  mount: mountChatGptDirection,
+  unmount: unmountChatGptDirection,
   matchesHostname: matchesChatGptHostname,
   selectors: {
     conversationReading: CONVERSATION_READING_SELECTORS,

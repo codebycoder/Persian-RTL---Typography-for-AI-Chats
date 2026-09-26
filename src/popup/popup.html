@@ -1,64 +1,188 @@
 <!doctype html>
-<html lang="en">
+<html lang="fa" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chat Font Customizer</title>
+    <title>شخصی‌ساز فونت چت</title>
     <link rel="stylesheet" href="./popup.css" />
+    <style data-preview-font-style></style>
   </head>
   <body>
     <main class="panel">
       <header class="header">
-        <img
-          class="logo"
-          src="/icons/icon48.png"
-          width="36"
-          height="36"
-          alt=""
-        />
+        <span class="logo-wrap" aria-hidden="true">
+          <img class="logo" src="/icons/icon48.png" width="42" height="42" alt="" />
+        </span>
         <div class="heading">
-          <h1 data-extension-name>Chat Font Customizer</h1>
-          <p class="description">Reading fonts for ChatGPT</p>
+          <h1>شخصی‌ساز فونت چت</h1>
+          <p class="description">خواندن راحت‌تر، با فونت دلخواه تو</p>
         </div>
       </header>
 
       <form class="settings" data-settings-form data-enabled="true">
-        <label class="power">
-          <span class="power-copy">
-            <span class="power-title">Font customization</span>
-            <span class="power-state" data-enabled-state aria-hidden="true">On</span>
-          </span>
-          <span class="switch">
-            <input
-              type="checkbox"
-              id="enabled-toggle"
-              class="switch-input"
-              role="switch"
-              data-enabled-toggle
-              checked
-            />
-            <span class="switch-ui" aria-hidden="true"></span>
-          </span>
-        </label>
+        <nav class="tabs" role="tablist" aria-label="بخش‌های افزونه">
+          <button
+            class="tab-button"
+            id="font-tab"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="font-panel"
+            data-tab-button="font"
+          >
+            فونت
+          </button>
+          <button
+            class="tab-button"
+            id="settings-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="settings-panel"
+            data-tab-button="settings"
+            tabindex="-1"
+          >
+            تنظیمات
+          </button>
+        </nav>
 
-        <div class="font-controls" data-font-controls>
-          <div class="field">
-            <label for="font-select">Font</label>
-            <div class="select-wrap">
-              <select id="font-select" data-font-select></select>
-            </div>
+        <section
+          class="tab-panel"
+          id="font-panel"
+          role="tabpanel"
+          aria-labelledby="font-tab"
+          data-tab-panel="font"
+        >
+          <label class="power">
+            <span class="power-copy">
+              <span class="power-title">تغییر فونت گفتگوها</span>
+              <span class="power-description">در چت‌جی‌پی‌تی و کلود</span>
+            </span>
+            <span class="power-side">
+              <span class="power-state" data-enabled-state aria-hidden="true">روشن</span>
+              <span class="switch">
+                <input
+                  type="checkbox"
+                  id="enabled-toggle"
+                  class="switch-input"
+                  role="switch"
+                  aria-label="تغییر فونت گفتگوها"
+                  data-enabled-toggle
+                  checked
+                />
+                <span class="switch-ui" aria-hidden="true"></span>
+              </span>
+            </span>
+          </label>
+
+          <div class="live-controls" data-font-controls>
+            <section class="font-card" aria-labelledby="font-field-label">
+              <div class="field-heading">
+                <span class="field-label" id="font-field-label">فونت گفتگو</span>
+                <span class="badge">اعمال خودکار</span>
+              </div>
+              <div class="font-picker" data-font-picker>
+                <button
+                  class="font-picker-trigger"
+                  id="font-select"
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-controls="font-options"
+                  aria-labelledby="font-field-label font-select-value"
+                  data-font-trigger
+                >
+                  <span class="font-picker-copy">
+                    <strong class="font-picker-value" id="font-select-value" data-font-value>
+                      وزیرمتن
+                    </strong>
+                    <span class="font-picker-meta" data-font-picker-meta>فونت آماده</span>
+                  </span>
+                  <svg class="font-picker-chevron" viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="m5.5 7.5 4.5 4.5 4.5-4.5" />
+                  </svg>
+                </button>
+                <div class="font-picker-popover" data-font-popover hidden>
+                  <div
+                    class="font-picker-list"
+                    id="font-options"
+                    role="listbox"
+                    aria-labelledby="font-field-label"
+                    data-font-options
+                  ></div>
+                </div>
+              </div>
+              <p class="field-hint">با انتخاب فونت، همان لحظه روی تب فعال اعمال می‌شود.</p>
+            </section>
+
+            <section class="preview" aria-label="پیش‌نمایش فونت">
+              <div class="preview-heading">
+                <p class="preview-kicker">پیش‌نمایش زنده</p>
+                <span class="preview-dot" aria-hidden="true"></span>
+              </div>
+              <p class="preview-fa" lang="fa" dir="rtl" data-preview-fa>
+                گفت‌وگوهای خوانا، تجربه‌ای آرام‌تر می‌سازند.
+              </p>
+              <p class="preview-secondary" lang="fa" dir="rtl" data-preview-en>
+                فونت خوب کمک می‌کند روی مفهوم تمرکز کنی، نه روی خواندن.
+              </p>
+            </section>
           </div>
+        </section>
 
-          <section class="preview" aria-label="Font preview">
-            <p class="preview-kicker">Preview</p>
-            <p class="preview-fa" lang="fa" dir="rtl" data-preview-fa>
-              خواندن این گفتگو باید واضح و راحت باشد.
-            </p>
-            <p class="preview-en" lang="en" dir="ltr" data-preview-en>
-              Reading this conversation should feel clear and comfortable.
-            </p>
+        <section
+          class="tab-panel"
+          id="settings-panel"
+          role="tabpanel"
+          aria-labelledby="settings-tab"
+          data-tab-panel="settings"
+          hidden
+        >
+          <section class="custom-font" aria-labelledby="custom-font-title">
+            <div class="custom-font-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22">
+                <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15" />
+              </svg>
+            </div>
+            <div class="custom-font-heading">
+              <h2 id="custom-font-title">فونت شخصی</h2>
+              <p>فایل فونت خودت را به افزونه اضافه کن.</p>
+            </div>
+
+            <button class="button upload-button" type="button" data-upload-button>
+              افزودن فونت
+            </button>
+            <input
+              type="file"
+              accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf"
+              data-font-file
+              hidden
+            />
+            <p class="upload-hint">فرمت‌های مجاز: WOFF2، WOFF، TTF و OTF تا ۴ مگابایت</p>
+
+            <div class="custom-font-details" data-custom-font-details hidden>
+              <span class="file-icon" aria-hidden="true">آ</span>
+              <div class="custom-font-copy">
+                <strong data-custom-font-name></strong>
+                <span data-custom-font-meta></span>
+              </div>
+              <button class="remove-button" type="button" data-remove-custom>حذف</button>
+            </div>
           </section>
-        </div>
+
+          <aside class="privacy-note">
+            <span class="privacy-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                <path d="M12 3 5.5 5.5v5.8c0 4.1 2.7 7.8 6.5 9.7 3.8-1.9 6.5-5.6 6.5-9.7V5.5L12 3Z" />
+                <path d="m9.2 12 1.8 1.8 3.8-4" />
+              </svg>
+            </span>
+            <div>
+              <strong>خصوصی و محلی</strong>
+              <p>فایل فونت فقط در همین مرورگر ذخیره می‌شود و جایی ارسال نمی‌شود.</p>
+            </div>
+          </aside>
+        </section>
 
         <p class="status" data-status role="status" aria-live="polite" hidden></p>
       </form>

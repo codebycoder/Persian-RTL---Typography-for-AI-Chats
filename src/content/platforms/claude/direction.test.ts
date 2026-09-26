@@ -399,6 +399,19 @@ function createComposerBlock(
   return { doc, editor, block };
 }
 
+function createSkillFileViewerBlock(
+  text: string,
+  options: { dir?: string; tag?: string; doc?: FakeDocument } = {},
+): { doc: FakeDocument; block: FakeElement; viewer: FakeElement } {
+  const doc = options.doc ?? new FakeDocument();
+  const viewer = el(doc, "div", { "data-skill-file-viewer": "true" });
+  const block = el(doc, options.tag ?? "p", options.dir ? { dir: options.dir } : {});
+  block.textContent = text;
+  viewer.appendChild(block);
+  doc.body.appendChild(viewer);
+  return { doc, block, viewer };
+}
+
 function characterDataMutation(target: FakeText): MutationRecord {
   return {
     type: "characterData",
@@ -590,6 +603,45 @@ test("headings and list items are resolved", () => {
   assert.equal(item.block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
 });
 
+test("assistant technical Persian lists keep markers on the RTL edge", () => {
+  const { doc, prose } = createAssistantBlock("", { tag: "div" });
+  const list = el(doc, "ul", { dir: "ltr" });
+  const mixed = el(doc, "li", { dir: "ltr" });
+  mixed.textContent = "Technical SEO: indexability, canonical, robots و sitemap بررسی شد";
+  const englishOnly = el(doc, "li", { dir: "ltr" });
+  englishOnly.textContent = "12 test suite / 75 test PASS";
+  list.appendChild(mixed);
+  list.appendChild(englishOnly);
+  prose.appendChild(list);
+
+  mountClaudeDirection(asDocument(doc));
+
+  assert.equal(list.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(mixed.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(englishOnly.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(englishOnly.hasAttribute("data-rasttext-ltr-item"), true);
+  assert.equal(list.getAttribute("dir"), "ltr");
+});
+
+test("composer lists use list direction while preserving English-only item text", () => {
+  const { doc, editor, block: list } = createComposerBlock("", { tag: "ul" });
+  const mixed = el(doc, "li", { dir: "auto" });
+  mixed.textContent = "SEO Phase 1 برای robots و noindex تکمیل شد";
+  const englishOnly = el(doc, "li", { dir: "auto" });
+  englishOnly.textContent = "type-check, ESLint and web build PASS";
+  list.appendChild(mixed);
+  list.appendChild(englishOnly);
+
+  mountClaudeDirection(asDocument(doc));
+  processComposerEditor(asElement(editor));
+
+  assert.equal(list.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(mixed.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(englishOnly.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(englishOnly.hasAttribute("data-rasttext-ltr-item"), true);
+  assert.equal(englishOnly.getAttribute("dir"), "auto");
+});
+
 test("Claude direction CSS isolates fenced pre blocks with plaintext BiDi", () => {
   const css = buildClaudeDirectionCss();
 
@@ -751,14 +803,21 @@ test("Claude direction CSS scopes resolved blocks and avoids override/global imp
   assert.match(css, /\[data-rasttext-dir="ltr"\]/);
   assert.match(css, /data-cds="Prose"/);
   assert.match(css, /data-perf-row="assistant"/);
+  assert.match(css, /data-skill-file-viewer="true"/);
   assert.match(css, /data-testid="chat-input"/);
+  assert.match(css, /\[data-rasttext-dir="rtl"\][\s\S]*\{\n {2}direction:\s*rtl;/);
+  assert.match(css, /\[data-rasttext-dir="ltr"\][\s\S]*\{\n {2}direction:\s*ltr;/);
   assert.match(css, /unicode-bidi:\s*normal/);
   assert.match(css, /direction:\s*rtl/);
   assert.match(css, /direction:\s*ltr/);
   assert.match(css, /text-align:\s*start/);
+  assert.match(css, /data-rasttext-ltr-item/);
+  assert.match(css, /padding-inline-start:\s*1\.5em !important/);
+  assert.match(css, /padding-inline-end:\s*0 !important/);
+  assert.match(css, /:is\(code, kbd, samp, tt\):not\(pre \*\)/);
+  assert.match(css, /direction:\s*ltr !important/);
+  assert.match(css, /unicode-bidi:\s*isolate !important/);
   assert.doesNotMatch(css, /bidi-override/);
-  assert.doesNotMatch(css, /direction\s*:\s*rtl\s*!important/);
-  assert.doesNotMatch(css, /direction\s*:\s*ltr\s*!important/);
   assert.doesNotMatch(css, /(?:^|\n)\s*html\s*\{/);
   assert.doesNotMatch(css, /(?:^|\n)\s*body\s*\{/);
   assert.match(css, /\[data-testid="user-message"\] pre,/);
@@ -766,7 +825,46 @@ test("Claude direction CSS scopes resolved blocks and avoids override/global imp
   assert.doesNotMatch(css, /data-message-author-role/);
 });
 
-test("ChatGPT BiDi CSS remains CSS-only plaintext and is unchanged in behavior", () => {
+test("skill file viewer Persian-dominant blocks resolve rtl without rewriting Claude dir", () => {
+  const text = "SwiftUI را نباید مثل یک فریم‌ورک کاملاً جدید یاد گرفت";
+  const { doc, block } = createSkillFileViewerBlock(text, { dir: "ltr" });
+  mountClaudeDirection(asDocument(doc));
+
+  assert.equal(text.includes("SwiftUI"), true);
+  assert.equal(detectBlockDirection(text), "rtl");
+  assert.equal(block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(block.getAttribute("dir"), "ltr");
+});
+
+test("skill file viewer English-only blocks resolve ltr", () => {
+  const { doc, block } = createSkillFileViewerBlock("English paragraph remains left to right.", {
+    dir: "rtl",
+  });
+  mountClaudeDirection(asDocument(doc));
+
+  assert.equal(block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
+  assert.equal(block.getAttribute("dir"), "rtl");
+});
+
+test("newly opened skill file viewer roots are discovered", () => {
+  const { doc } = createAssistantBlock("Use Present Perfect when talking about experiences.");
+  mountClaudeDirection(asDocument(doc));
+
+  const viewer = el(doc, "div", { "data-skill-file-viewer": "true" });
+  const paragraph = el(doc, "p", { dir: "ltr" });
+  paragraph.textContent = "نقشه راه جامع یادگیری SwiftUI";
+  viewer.appendChild(paragraph);
+
+  const discovery = activeDiscoveryObservers()[0];
+  assert.ok(discovery);
+  doc.body.appendChild(viewer);
+  discovery.callback([childListMutation(doc.body, [viewer])], discovery as unknown as MutationObserver);
+
+  assert.equal(paragraph.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(paragraph.getAttribute("dir"), "ltr");
+});
+
+test("ChatGPT generic BiDi fallback remains plaintext for unresolved blocks", () => {
   const css = buildConversationBidiCss(chatgptAdapter);
 
   assert.match(css, /unicode-bidi:\s*plaintext !important/);
@@ -781,9 +879,9 @@ test("ChatGPT BiDi CSS remains CSS-only plaintext and is unchanged in behavior",
   assert.doesNotMatch(css, /data-testid="chat-input"/);
 });
 
-test("ChatGPT adapter still has no direction lifecycle", () => {
-  assert.equal(chatgptAdapter.mount, undefined);
-  assert.equal(chatgptAdapter.unmount, undefined);
+test("ChatGPT and Claude expose their own direction lifecycle", () => {
+  assert.equal(typeof chatgptAdapter.mount, "function");
+  assert.equal(typeof chatgptAdapter.unmount, "function");
   assert.equal(typeof claudeAdapter.mount, "function");
   assert.equal(typeof claudeAdapter.unmount, "function");
 });
@@ -1015,6 +1113,7 @@ test("composer cleanup removes listeners and RastText-owned attributes", () => {
 test("clearComposerDirectionState removes only RastText attributes", () => {
   const { doc, editor, block } = createComposerBlock("متن فارسی", { dir: "auto" });
   block.setAttribute("data-other", "keep");
+  block.setAttribute("data-rasttext-ltr-item", "");
   mountClaudeDirection(asDocument(doc));
   processComposerEditor(asElement(editor));
   assert.equal(block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
@@ -1022,6 +1121,7 @@ test("clearComposerDirectionState removes only RastText attributes", () => {
   clearComposerDirectionState(asElement(editor));
 
   assert.equal(block.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+  assert.equal(block.hasAttribute("data-rasttext-ltr-item"), false);
   assert.equal(block.getAttribute("dir"), "auto");
   assert.equal(block.getAttribute("data-other"), "keep");
 });

@@ -43,6 +43,9 @@ Thumbs.db
 # Chrome extension private key (created if the extension is packed)
 *.pem
 
-# Local font files; keep the folder via .gitkeep
+# Bundled open-source fonts and licenses are versioned; other local files are not.
 fonts/*
 !fonts/.gitkeep
+!fonts/*-Variable.ttf
+!fonts/*-OFL.txt
+!fonts/LICENSES.md

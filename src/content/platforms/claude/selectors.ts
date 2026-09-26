@@ -13,16 +13,25 @@
  *   Scoped under assistant transcript rows so the message action toolbar,
  *   timestamps, buttons, and icons outside Prose are not restyled. Do not
  *   apply the font to the entire transcript row. The morphing TurnStatus
- *   label is a separate UI surface (see ASSISTANT_TURN_STATUS_ROOT).
+ *   label and the thinking timeline are separate surfaces (see
+ *   ASSISTANT_TURN_STATUS_ROOT and ASSISTANT_TIMELINE_TEXT_SELECTOR).
+ *
+ * Skill / Outputs file viewer (verified 2026-09):
+ *   [data-skill-file-viewer="true"]
+ *   Opening a generated `.md` (or similar) opens a side pane whose body is
+ *   Markdown under this attribute. There is no `[data-cds="Prose"]` and no
+ *   assistant transcript row. Do not use `#wiggle-file-content`,
+ *   `data-prose-review-dockey`, `font-claude-response`, `standard-markdown`,
+ *   or hashed `_blocks_*` classes as selectors.
  *
  * Claude already sets dir="rtl" or dir="ltr" on many generated blocks
  * (p, h3, ul, …). RastText must not replace those attributes. The generic
  * BiDi engine still applies unicode-bidi: plaintext and text-align: start
  * to logical prose blocks. That CSS-only first-strong path is not enough
- * for Claude assistant prose that begins with English but is
- * Persian-dominant; `platforms/claude/direction.ts` resolves those
- * blocks locally and stores the result in `data-rasttext-dir` without
- * rewriting Claude's `dir`.
+ * for Claude assistant prose (and file-viewer Markdown) that begins with
+ * English but is Persian-dominant; `platforms/claude/direction.ts`
+ * resolves those blocks locally and stores the result in
+ * `data-rasttext-dir` without rewriting Claude's `dir`.
  *
  * Composer (verified 2026-09, authenticated Claude):
  *   [data-testid="chat-input"][contenteditable="true"][role="textbox"]
@@ -79,18 +88,30 @@ export const ASSISTANT_ROW_ROOT =
 
 export const ASSISTANT_PROSE_ROOT = `${ASSISTANT_ROW_ROOT} [data-cds="Prose"]`;
 
+/**
+ * Side-pane Markdown file viewer opened from Skills / Outputs.
+ * Verified 2026-09: `data-skill-file-viewer="true"` wraps the scrollable
+ * preview body. Not an editable Canvas surface.
+ */
+export const CLAUDE_SKILL_FILE_VIEWER = '[data-skill-file-viewer="true"]';
+
 export const CONVERSATION_READING_SELECTORS = [
   ASSISTANT_PROSE_ROOT,
   USER_MESSAGE_ROOT,
+  CLAUDE_SKILL_FILE_VIEWER,
 ] as const;
 
 /**
- * Both conversation roots wrap one or more prose blocks. Isolating a
- * wrapper would give the whole message one inferred base direction.
+ * Conversation / file-viewer roots wrap one or more prose blocks.
+ * Isolating a wrapper would give the whole message one inferred base
+ * direction.
  */
 export function isBidiWrapperSelector(selector: string): boolean {
   return (
-    selector.includes('[data-cds="Prose"]') || selector.includes(USER_MESSAGE_ROOT)
+    selector.includes('[data-cds="Prose"]') ||
+    selector.includes(USER_MESSAGE_ROOT) ||
+    selector.includes('data-skill-file-viewer="true"') ||
+    selector.includes(CLAUDE_SKILL_FILE_VIEWER)
   );
 }
 
@@ -110,6 +131,8 @@ export const FENCED_CODE_BIDI_SELECTORS = [
   `${ASSISTANT_ROW_ROOT} pre code`,
   `${USER_MESSAGE_ROOT} pre`,
   `${USER_MESSAGE_ROOT} pre code`,
+  `${CLAUDE_SKILL_FILE_VIEWER} pre`,
+  `${CLAUDE_SKILL_FILE_VIEWER} pre code`,
   `${CLAUDE_COMPOSER_EDITOR} pre`,
   `${CLAUDE_COMPOSER_EDITOR} pre code`,
 ] as const;
@@ -119,6 +142,8 @@ export const CODE_FONT_SELECTORS = [
   `${ASSISTANT_ROW_ROOT} pre *`,
   `${USER_MESSAGE_ROOT} pre`,
   `${USER_MESSAGE_ROOT} pre *`,
+  `${CLAUDE_SKILL_FILE_VIEWER} pre`,
+  `${CLAUDE_SKILL_FILE_VIEWER} pre *`,
   `${CLAUDE_COMPOSER_EDITOR} pre`,
   `${CLAUDE_COMPOSER_EDITOR} pre *`,
 ] as const;
@@ -128,6 +153,8 @@ export const CODE_PRESERVE_SELECTORS = [
   `${ASSISTANT_ROW_ROOT} :is(code, kbd, samp, tt):not(pre *) *`,
   `${USER_MESSAGE_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
   `${USER_MESSAGE_ROOT} :is(code, kbd, samp, tt):not(pre *) *`,
+  `${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt):not(pre *)`,
+  `${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt):not(pre *) *`,
   `${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt):not(pre *)`,
   `${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt):not(pre *) *`,
 ] as const;
@@ -158,17 +185,20 @@ export const COMPOSER_AND_CONTROL_EXCLUSIONS = [
 ] as const;
 
 /**
- * Claude chrome surfaces (not conversation reading text). Add one surface
- * at a time from authenticated DOM evidence. Planned later, not in this
- * list until markup is verified: project group labels, "Chats and tasks",
- * nav labels (New / Projects / Artifacts / Code / Customize), account
- * footer, and other sidebar buttons.
+ * Claude surfaces outside assistant Prose. Glyph surfaces are chrome and
+ * keep Latin on the host face. The thinking timeline is reading prose and
+ * uses the conversation font stack. Add one surface at a time from
+ * authenticated DOM evidence. Planned later, not in this list until markup
+ * is verified: project group labels, "Chats and tasks", nav labels
+ * (New / Projects / Artifacts / Code / Customize), account footer, and
+ * other sidebar buttons.
  */
 export const CLAUDE_UI_SURFACE_IDS = [
   "sidebar-chat-titles",
   "ask-user-answers-card",
   "ask-user-input-banner",
   "assistant-turn-status",
+  "assistant-timeline-text",
 ] as const;
 
 export type ClaudeUiSurfaceId = (typeof CLAUDE_UI_SURFACE_IDS)[number];
@@ -177,6 +207,11 @@ export type ClaudeUiSurface = {
   readonly id: ClaudeUiSurfaceId;
   readonly selectors: readonly string[];
   readonly textDescendants: readonly string[];
+  /**
+   * Defaults to the Persian-glyph stack. `conversation` uses the same
+   * stack as message text.
+   */
+  readonly font?: "glyphs" | "conversation";
 };
 
 /**
@@ -280,6 +315,27 @@ export const ASSISTANT_TURN_STATUS_PLAINTEXT_BIDI_SELECTORS = [
 ] as const;
 
 /**
+ * Assistant thinking timeline steps (verified 2026-09). Each step is
+ * `[data-timeline-text]`, outside `[data-cds="Prose"]`. The visible
+ * sentence is a descendant `p` (English or Persian). The step root carries
+ * Tailwind `!font-base`, so the font rule targets the paragraph: a rule on
+ * the root alone loses to that utility and the paragraph would keep
+ * inheriting Claude's face.
+ *
+ * This is reading prose, so the surface uses the conversation font stack.
+ * Claude already sets `dir` on each paragraph. Do not run generic BiDi
+ * here and do not rewrite `dir`.
+ *
+ * Do not use `group/timeline-text`, `font-base`, `font-sans`,
+ * `standard-markdown`, `_blocks_*`, Tailwind utilities, or wrapper depth.
+ * Do not style the step root itself: icons and the thinking header stay
+ * outside this selector.
+ */
+export const ASSISTANT_TIMELINE_TEXT_SELECTOR = "[data-timeline-text] :is(p)";
+
+export const ASSISTANT_TIMELINE_TEXT_SELECTORS = [ASSISTANT_TIMELINE_TEXT_SELECTOR] as const;
+
+/**
  * AskUserQuestion UI often renders inside assistant Prose, so children
  * inherit the conversation font stack. Revert only the shell and svg nodes;
  * CDS icon ligatures are restored via `CLAUDE_CDS_ICON_*` below.
@@ -318,6 +374,8 @@ export const ICON_PRESERVE_SELECTORS = [
   `${ASSISTANT_PROSE_ROOT} svg *`,
   `${USER_MESSAGE_ROOT} svg`,
   `${USER_MESSAGE_ROOT} svg *`,
+  `${CLAUDE_SKILL_FILE_VIEWER} svg`,
+  `${CLAUDE_SKILL_FILE_VIEWER} svg *`,
   `${CLAUDE_COMPOSER_EDITOR} svg`,
   `${CLAUDE_COMPOSER_EDITOR} svg *`,
   ...ASK_USER_ICON_PRESERVE_SELECTORS,
@@ -344,5 +402,11 @@ export const CLAUDE_UI_SURFACES: readonly ClaudeUiSurface[] = [
     id: "assistant-turn-status",
     selectors: ASSISTANT_TURN_STATUS_SELECTORS,
     textDescendants: ASSISTANT_TURN_STATUS_TEXT_DESCENDANTS,
+  },
+  {
+    id: "assistant-timeline-text",
+    selectors: ASSISTANT_TIMELINE_TEXT_SELECTORS,
+    textDescendants: [],
+    font: "conversation",
   },
 ];

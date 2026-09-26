@@ -1,8 +1,15 @@
-import { buildFontFamilyStack, quoteCssFontFamily, type RegisteredFont } from "@shared/font-registry";
+import {
+  buildFontFaceCss,
+  buildFontFaceSourceList,
+  buildFontFamilyStack,
+  quoteCssFontFamily,
+  type FontDefinition,
+} from "@shared/font-registry";
 import { buildCssRule, joinCssBlocks, joinSelectors, nonBlankSelectors } from "./css-rule";
 import {
   buildUiSurfaceTextSelectors,
   type PlatformAdapter,
+  type UiSurfaceFont,
 } from "./platforms/types";
 
 /**
@@ -11,9 +18,11 @@ import {
  * declaration always beats the font inherited from the container, so
  * these elements need their own scoped rule.
  *
- * Deliberately excluded: `pre`, `code`, `kbd`, `samp`, `tt` (code stays
- * monospace), `svg` (icons), and `span` (syntax-highlighting spans live
- * inside `pre code`; ordinary Markdown text does not rely on bare spans).
+ * Deliberately excluded here: `pre`, `code`, `kbd`, `samp`, `tt` (code
+ * stays monospace) and `svg` (icons). `span` is added in
+ * `markdownTextSelectorList` with `:not(pre *)` guards — ChatGPT often
+ * wraps streaming / inline text in spans that carry their own
+ * `font-family`, which the container rule cannot override.
  */
 export const MARKDOWN_TEXT_DESCENDANTS = [
   "p",
@@ -104,15 +113,18 @@ function readingSelectorList(platform: PlatformAdapter): string {
 /**
  * Descendant rules for ordinary Markdown text. The container rule alone is
  * not enough when a site declares `font-family` directly on elements like
- * `p`; a direct declaration overrides the inherited container font. Kept
- * to text-bearing elements so code, icons, and syntax highlighting are
- * untouched.
+ * `p` or `span`; a direct declaration overrides the inherited container
+ * font. `span` is included with code-tree exclusions so syntax
+ * highlighting inside `pre code` keeps the monospace stack.
  */
 function markdownTextSelectorList(platform: PlatformAdapter): string {
   const excluded = composerExclusions(platform);
-  const descendants = MARKDOWN_TEXT_DESCENDANTS.join(", ");
+  const descendants = [...MARKDOWN_TEXT_DESCENDANTS, "span"].join(", ");
   return nonBlankSelectors(platform.selectors.conversationReading)
-    .map((selector) => `${selector}${excluded} :is(${descendants})`)
+    .map(
+      (selector) =>
+        `${selector}${excluded} :is(${descendants}):not(pre *):not(code *):not(kbd *):not(samp *):not(tt *):not([data-markdown-copy="inline-code"])`,
+    )
     .join(",\n");
 }
 
@@ -123,9 +135,7 @@ function editorSelectorList(selectors: readonly string[]): string {
 /**
  * Typed text in ProseMirror editors often carries its own `font-family`,
  * so inheritance from the editor root is not enough. `span` is included
- * here only: Lexical/ProseMirror decorations live in spans, unlike
- * conversation Markdown where bare spans are left alone to protect
- * syntax highlighting.
+ * because Lexical/ProseMirror decorations live in spans.
  */
 function editorTextSelectorList(selectors: readonly string[]): string {
   const descendants = [...MARKDOWN_TEXT_DESCENDANTS, "span"].join(", ");
@@ -146,57 +156,25 @@ function editorPlaceholderSelectorList(selectors: readonly string[]): string {
     .join(",\n");
 }
 
-function uniqueFontNames(names: readonly string[]): string[] {
-  const unique: string[] = [];
-  for (const name of names) {
-    if (!unique.includes(name)) {
-      unique.push(name);
-    }
-  }
-  return unique;
-}
-
-function buildLocalSrcList(names: readonly string[]): string {
-  return uniqueFontNames(names)
-    .map((name) => `local(${quoteCssFontFamily(name)})`)
-    .join(", ");
-}
-
-function buildLocalFontFaceCss(font: RegisteredFont): string {
-  return font.localFaceNames
-    .map((face) => {
-      return [
-        "@font-face {",
-        `  font-family: ${quoteCssFontFamily(font.cssFamilyAlias)};`,
-        `  src: ${buildLocalSrcList(face.localNames)};`,
-        `  font-weight: ${String(face.weight)};`,
-        "  font-style: normal;",
-        "  font-display: swap;",
-        "}",
-      ].join("\n");
-    })
-    .join("\n\n");
-}
-
 /**
  * Selected-registry faces limited to Persian/Arabic code points.
  * Conversation faces stay unrestricted so existing chat typography is
  * unchanged.
  */
-export function buildPersianGlyphFontFaceCss(font: RegisteredFont): string {
+export function buildPersianGlyphFontFaceCss(
+  font: FontDefinition,
+  resolveAssetUrl?: (assetPath: string) => string,
+): string {
   const unicodeRange = PERSIAN_ARABIC_UNICODE_RANGES.join(", ");
 
-  return font.localFaceNames
+  return font.faces
     .map((face) => {
-      const names =
-        face.weight === 400
-          ? [...face.localNames, ...font.candidateFamilyNames]
-          : [...face.localNames];
+      const names = [...face.localNames, ...font.candidateFamilyNames];
 
       return [
         "@font-face {",
         `  font-family: ${quoteCssFontFamily(PERSIAN_GLYPH_FONT_FAMILY_ALIAS)};`,
-        `  src: ${buildLocalSrcList(names)};`,
+        `  src: ${buildFontFaceSourceList(face, resolveAssetUrl, names)};`,
         `  unicode-range: ${unicodeRange};`,
         `  font-weight: ${String(face.weight)};`,
         "  font-style: normal;",
@@ -213,8 +191,16 @@ export function buildUiSurfaceFontStack(): string {
     .join(", ");
 }
 
-export function buildUiSurfaceSelectorList(platform: PlatformAdapter): string {
-  return buildUiSurfaceTextSelectors(platform.selectors.uiSurfaces).join(",\n");
+export function buildUiSurfaceSelectorList(
+  platform: PlatformAdapter,
+  font?: UiSurfaceFont,
+): string {
+  const surfaces =
+    font === undefined
+      ? platform.selectors.uiSurfaces
+      : platform.selectors.uiSurfaces.filter((surface) => (surface.font ?? "glyphs") === font);
+
+  return buildUiSurfaceTextSelectors(surfaces).join(",\n");
 }
 
 /**
@@ -228,7 +214,11 @@ export function buildUiSurfaceSelectorList(platform: PlatformAdapter): string {
  * to a broader or malformed selector — an empty group must never widen
  * the CSS scope.
  */
-export function buildConversationFontCss(font: RegisteredFont, platform: PlatformAdapter): string {
+export function buildConversationFontCss(
+  font: FontDefinition,
+  platform: PlatformAdapter,
+  resolveAssetUrl?: (assetPath: string) => string,
+): string {
   const stack = buildFontFamilyStack(font);
   const uiStack = buildUiSurfaceFontStack();
   const reading = readingSelectorList(platform);
@@ -239,7 +229,8 @@ export function buildConversationFontCss(font: RegisteredFont, platform: Platfor
   const canvas = editorSelectorList(platform.selectors.canvasEditors);
   const canvasText = editorTextSelectorList(platform.selectors.canvasEditors);
   const canvasPlaceholder = editorPlaceholderSelectorList(platform.selectors.canvasEditors);
-  const uiSurfaces = buildUiSurfaceSelectorList(platform);
+  const uiGlyphs = buildUiSurfaceSelectorList(platform, "glyphs");
+  const uiConversation = buildUiSurfaceSelectorList(platform, "conversation");
   const codeFont = joinSelectors(platform.selectors.codeFont ?? []);
   const code = joinSelectors(platform.selectors.codePreserve);
   const icons = joinSelectors(platform.selectors.iconPreserve);
@@ -247,8 +238,8 @@ export function buildConversationFontCss(font: RegisteredFont, platform: Platfor
   const cdsIconFontFamily = platform.selectors.cdsIconFontFamily;
 
   return joinCssBlocks([
-    buildLocalFontFaceCss(font),
-    buildPersianGlyphFontFaceCss(font),
+    buildFontFaceCss(font, resolveAssetUrl),
+    buildPersianGlyphFontFaceCss(font, resolveAssetUrl),
     buildCssRule(reading, `  font-family: ${stack} !important;`),
     buildCssRule(markdownText, `  font-family: ${stack} !important;`),
     buildCssRule(composer, `  font-family: ${stack} !important;`),
@@ -257,7 +248,8 @@ export function buildConversationFontCss(font: RegisteredFont, platform: Platfor
     buildCssRule(canvas, `  font-family: ${stack} !important;`),
     buildCssRule(canvasText, `  font-family: ${stack} !important;`),
     buildCssRule(canvasPlaceholder, `  font-family: ${stack} !important;`),
-    buildCssRule(uiSurfaces, `  font-family: ${uiStack} !important;`),
+    buildCssRule(uiGlyphs, `  font-family: ${uiStack} !important;`),
+    buildCssRule(uiConversation, `  font-family: ${stack} !important;`),
     buildCssRule(
       code,
       `  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;`,

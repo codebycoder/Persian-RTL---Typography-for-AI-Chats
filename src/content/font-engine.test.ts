@@ -63,14 +63,14 @@ test("applyFontSettingsToPage updates the existing style element", () => {
   existing.textContent = "stale {}";
 
   applyFontSettingsToPage(
-    { ...DEFAULT_FONT_SETTINGS, fontId: "peyda" },
+    { ...DEFAULT_FONT_SETTINGS, fontId: "estedad" },
     chatgptAdapter,
     host,
   );
 
   assert.equal(mounted.length, 1);
   assert.equal(mounted[0], existing);
-  assert.match(existing.textContent ?? "", /CFC Peyda/);
+  assert.match(existing.textContent ?? "", /CFC Estedad/);
   assert.doesNotMatch(existing.textContent ?? "", /stale/);
 });
 

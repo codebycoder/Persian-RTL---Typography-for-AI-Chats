@@ -17,7 +17,7 @@ import {
   assertNoMalformedSelectorList,
 } from "./test-support/css-assertions";
 
-function fontCss(fontId: FontId = "peyda"): string {
+function fontCss(fontId: FontId = "estedad"): string {
   return buildConversationFontCss(getRegisteredFont(fontId), chatgptAdapter);
 }
 
@@ -58,12 +58,12 @@ function fixtureAdapterWith(overrides: Partial<PlatformSelectors>): PlatformAdap
   };
 }
 
-test("conversation CSS targets message reading text and uses only local() faces", () => {
+test("conversation CSS targets message reading text and includes bundled faces", () => {
   const css = fontCss();
 
   assert.match(css, /@font-face/);
-  assert.match(css, /src: local\(/);
-  assert.doesNotMatch(css, /url\(/);
+  assert.match(css, /src: url\("fonts\/Estedad-Variable\.ttf"\)/);
+  assert.match(css, /local\(/);
   assert.match(css, /data-message-author-role="assistant"/);
   assert.match(css, /data-message-author-role="user"/);
   assert.match(css, /\.markdown/);
@@ -71,7 +71,7 @@ test("conversation CSS targets message reading text and uses only local() faces"
 });
 
 test("conversation CSS does not restyle the whole page, generic controls, or code with !important", () => {
-  const css = fontCss("yekan-bakh");
+  const css = fontCss("vazirmatn");
 
   assert.doesNotMatch(css, /(?:^|\n)\s*html\s*\{/);
   assert.doesNotMatch(css, /(?:^|\n)\s*body\s*\{/);
@@ -89,15 +89,25 @@ test("conversation CSS does not restyle the whole page, generic controls, or cod
 
 test("conversation CSS restyles the prompt composer, including typed paragraphs", () => {
   const css = fontCss();
+  const composerEditor = String.raw`\[data-composer-markdown\]\[contenteditable="true"\]\[role="textbox"\]`;
 
-  assert.match(css, /(?:^|\n)#prompt-textarea \{\n {2}font-family:[\s\S]*!important/);
+  assert.match(
+    css,
+    new RegExp(
+      `#prompt-textarea,\\n${composerEditor} \\{\\n {2}font-family:[\\s\\S]*!important`,
+    ),
+  );
   assert.match(css, /#prompt-textarea :is\([^)]*\bp\b[^)]*\)/);
+  assert.match(css, new RegExp(`${composerEditor} :is\\([^)]*\\bp\\b[^)]*\\)`));
   assert.match(css, /#prompt-textarea :is\([^)]*\bspan\b[^)]*\)/);
   assert.match(css, /#prompt-textarea :is\([^)]*\):not\(pre \*\):not\(code \*\)/);
   assert.match(
     css,
-    /#prompt-textarea::placeholder,\n#prompt-textarea p::before \{\n {2}font-family:[\s\S]*!important/,
+    new RegExp(
+      `#prompt-textarea::placeholder,\\n#prompt-textarea p::before,\\n${composerEditor}::placeholder,\\n${composerEditor} p::before \\{\\n {2}font-family:[\\s\\S]*!important`,
+    ),
   );
+  assert.doesNotMatch(css, /RichTextInput-|composer-NYb0tQ/);
 });
 
 test("conversation CSS restyles ChatGPT Canvas writing-block editors", () => {
@@ -129,10 +139,12 @@ test("conversation CSS restyles ordinary Markdown descendants, not just the cont
 
   // Site typography declares font-family directly on these elements, so the
   // container rule alone cannot reach assistant reading text.
-  for (const element of ["p", "h1", "h2", "li", "blockquote", "td", "th", "a", "em", "strong"]) {
+  for (const element of ["p", "h1", "h2", "li", "blockquote", "td", "th", "a", "em", "strong", "span"]) {
     assert.match(
       css,
-      new RegExp(`:is\\([^)]*\\b${element}\\b[^)]*\\) \\{\\n  font-family:[^}]*!important`),
+      new RegExp(
+        `:is\\([^)]*\\b${element}\\b[^)]*\\)(?::not\\([^)]*\\))* \\{\\n  font-family:[^}]*!important`,
+      ),
     );
   }
 
@@ -145,9 +157,13 @@ test("conversation CSS restyles ordinary Markdown descendants, not just the cont
 test("conversation CSS covers the current frontend's message markup", () => {
   const css = fontCss();
 
-  // Verified against a live logged-out conversation (2026-09): turns use
-  // data-message-role, assistant Markdown lives in [data-assistant-markdown],
-  // and user reading text is [data-user-message-copy].
+  // Thread shell frontend (verified live 2026-09 on chatgpt.com Work).
+  assert.match(css, /\[data-markdown-text-style="assistant-message"\]/);
+  assert.match(css, /\[data-user-message-bubble="true"\]/);
+  assert.match(css, /\[role="tabpanel"\]\[data-tab-id\^="chatgpt-file:"\]/);
+  assert.match(css, /\[data-markdown-copy="inline-code"\]/);
+
+  // Older logged-out frontend (2026-09): turns use data-message-role.
   assert.match(css, /\[data-message-role="assistant"\] \[data-assistant-markdown\]/);
   assert.match(css, /\[data-message-role="user"\] \[data-user-message-copy\]/);
 
@@ -196,16 +212,19 @@ test("conversation CSS covers Work chat markdown outside message-role wrappers",
   assert.match(css, /\.markdown\.markdown-new-styling :is\(pre, code, kbd, samp, tt\)/);
 });
 
-test("descendant font rule excludes code, icons, and composer elements", () => {
+test("descendant font rule includes span but excludes code trees and icons", () => {
   const css = fontCss();
 
   const descendantRule = css.split("\n").find((line) => line.includes(":is(p,"));
   assert.ok(descendantRule, "expected a descendant :is(p, ...) rule");
+  assert.match(descendantRule, /\bspan\b/);
+  assert.match(descendantRule, /:not\(pre \*\):not\(code \*\)/);
+  assert.match(descendantRule, /:not\(\[data-markdown-copy="inline-code"\]\)/);
 
-  for (const excluded of ["pre", "code", "kbd", "samp", "tt", "svg", "span", "textarea", "input", "button"]) {
+  for (const excluded of ["pre", "code", "kbd", "samp", "tt", "svg", "textarea", "input", "button"]) {
     assert.ok(
       !new RegExp(`:is\\([^)]*\\b${excluded}\\b[^)]*\\)`).test(descendantRule),
-      `descendant rule must not target ${excluded}`,
+      `descendant :is() list must not target ${excluded}`,
     );
   }
 });
@@ -242,7 +261,7 @@ test("sidebar CSS does not target the item options button or SVG", () => {
 });
 
 test("Persian glyph faces use unicode-range so English can keep the UI fallback", () => {
-  const peyda = getRegisteredFont("peyda");
+  const peyda = getRegisteredFont("estedad");
   const faces = buildPersianGlyphFontFaceCss(peyda);
   const stack = buildUiSurfaceFontStack();
   const css = buildConversationFontCss(peyda, chatgptAdapter);
@@ -256,13 +275,13 @@ test("Persian glyph faces use unicode-range so English can keep the UI fallback"
   assert.match(faces, new RegExp(`font-family: "${PERSIAN_GLYPH_FONT_FAMILY_ALIAS}"`));
   assert.match(stack, new RegExp(`^"${PERSIAN_GLYPH_FONT_FAMILY_ALIAS}"`));
   assert.match(stack, /ui-sans-serif|system-ui|sans-serif/);
-  assert.doesNotMatch(stack, /"CFC Peyda"|Peyda/);
+  assert.doesNotMatch(stack, /"CFC Estedad"|Peyda/);
 
   const sidebarBlock = css.split("}").find((block) => block.includes("data-sidebar-item"));
   assert.ok(sidebarBlock, "expected a sidebar font-family rule");
   assert.match(sidebarBlock, new RegExp(`font-family: "${PERSIAN_GLYPH_FONT_FAMILY_ALIAS}"`));
   assert.match(sidebarBlock, /ui-sans-serif/);
-  assert.doesNotMatch(sidebarBlock, /"CFC Peyda"/);
+  assert.doesNotMatch(sidebarBlock, /"CFC Estedad"/);
 });
 
 test("Persian glyph faces still resolve through the selected registry font", () => {
@@ -271,8 +290,8 @@ test("Persian glyph faces still resolve through the selected registry font", () 
     const css = buildConversationFontCss(font, chatgptAdapter);
 
     assert.match(css, new RegExp(`font-family: ${font.cssFamilyAlias.includes(" ") ? `"${font.cssFamilyAlias}"` : font.cssFamilyAlias}`));
-    assert.match(faces, /src: local\(/);
-    assert.doesNotMatch(faces, /url\(/);
+    assert.match(faces, /src: url\("fonts\//);
+    assert.match(faces, /local\(/);
 
     for (const candidate of font.candidateFamilyNames) {
       assert.ok(
@@ -281,7 +300,7 @@ test("Persian glyph faces still resolve through the selected registry font", () 
       );
     }
 
-    for (const face of font.localFaceNames) {
+    for (const face of font.faces) {
       assert.ok(
         face.localNames.some((name) =>
           faces.includes(`local(${name.includes(" ") ? `"${name}"` : name})`),
@@ -306,7 +325,7 @@ test("conversation selectors and exclusions remain intact after sidebar support"
 });
 
 test("font engine generates styles from adapter-provided selectors", () => {
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), fixtureAdapter);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), fixtureAdapter);
 
   assert.match(css, /\[data-fixture-reading\]:not\(#fixture-composer\)/);
   assert.match(css, /#fixture-composer \{\n {2}font-family:/);
@@ -327,7 +346,7 @@ test("font engine generates styles from adapter-provided selectors", () => {
 
 test("empty conversationReading emits no reading or markdown-descendant font rule", () => {
   const platform = fixtureAdapterWith({ conversationReading: [] });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assert.doesNotMatch(css, /data-fixture-reading/);
   // The other groups are still present and untouched.
@@ -338,7 +357,7 @@ test("empty conversationReading emits no reading or markdown-descendant font rul
 
 test("empty bidiLeaf does not affect font-engine output (font engine does not read bidiLeaf)", () => {
   const platform = fixtureAdapterWith({ bidiLeaf: [] });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assert.match(css, /\[data-fixture-reading\]/);
   assertNoEmptySelectorRule(css);
@@ -347,7 +366,7 @@ test("empty bidiLeaf does not affect font-engine output (font engine does not re
 
 test("empty composer emits no composer, composer-text, or composer-placeholder rule", () => {
   const platform = fixtureAdapterWith({ composer: [] });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   // No composer-specific rule remains (the exclusions group still legally
   // references "#fixture-composer" inside :not(), and canvasEditors still
@@ -363,7 +382,7 @@ test("empty composer emits no composer, composer-text, or composer-placeholder r
 
 test("empty canvasEditors emits no canvas, canvas-text, or canvas-placeholder rule", () => {
   const platform = fixtureAdapterWith({ canvasEditors: [] });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assert.doesNotMatch(css, /fixture-editor/);
   assertNoEmptySelectorRule(css);
@@ -372,7 +391,7 @@ test("empty canvasEditors emits no canvas, canvas-text, or canvas-placeholder ru
 
 test("empty codePreserve emits no code-preservation rule", () => {
   const platform = fixtureAdapterWith({ codePreserve: [] });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assert.doesNotMatch(css, /fixture-code/);
   assertNoEmptySelectorRule(css);
@@ -381,7 +400,7 @@ test("empty codePreserve emits no code-preservation rule", () => {
 
 test("empty iconPreserve emits no icon-preservation rule", () => {
   const platform = fixtureAdapterWith({ iconPreserve: [] });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assert.doesNotMatch(css, /fixture-icon/);
   assertNoEmptySelectorRule(css);
@@ -390,7 +409,7 @@ test("empty iconPreserve emits no icon-preservation rule", () => {
 
 test("empty exclusions produce no malformed :not() and do not break other rules", () => {
   const platform = fixtureAdapterWith({ exclusions: [] });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assert.doesNotMatch(css, /:not\(\)/);
   assert.doesNotMatch(css, /:not\(\s*\)/);
@@ -403,7 +422,7 @@ test("empty exclusions produce no malformed :not() and do not break other rules"
 
 test("empty uiSurfaces emits no UI-surface font rule", () => {
   const platform = fixtureAdapterWith({ uiSurfaces: [] });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assert.doesNotMatch(css, /fixture-ui/);
   assertNoEmptySelectorRule(css);
@@ -414,7 +433,7 @@ test("a UiSurface with empty selectors emits nothing for that surface", () => {
   const platform = fixtureAdapterWith({
     uiSurfaces: [{ id: "empty-surface", selectors: [], textDescendants: ["span"] }],
   });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assert.doesNotMatch(css, /empty-surface/);
   // No UI-surface font-family rule at all: the surface list collapses to
@@ -426,11 +445,40 @@ test("a UiSurface with empty selectors emits nothing for that surface", () => {
   assertNoMalformedSelectorList(css);
 });
 
+test("a conversation-font UiSurface uses the reading stack and stays out of the glyph rule", () => {
+  const platform = fixtureAdapterWith({
+    uiSurfaces: [
+      { id: "glyph-ui", selectors: ["[data-fixture-ui]"], textDescendants: ["span"] },
+      {
+        id: "reading-ui",
+        selectors: ["[data-fixture-reading-ui] :is(p)"],
+        textDescendants: [],
+        font: "conversation",
+      },
+    ],
+  });
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
+  const glyphBlock = css.split("}").find((block) => block.includes("data-fixture-ui"));
+  const readingBlock = css.split("}").find((block) => block.includes("data-fixture-reading-ui"));
+
+  assert.ok(glyphBlock, "expected a glyph-stack UI rule");
+  assert.match(glyphBlock, /font-family: "CFC Persian Glyphs"/);
+  assert.doesNotMatch(glyphBlock, /data-fixture-reading-ui/);
+
+  assert.ok(readingBlock, "expected a conversation-stack UI rule");
+  assert.match(readingBlock, /font-family: "CFC Estedad"/);
+  assert.match(readingBlock, /!important/);
+  assert.doesNotMatch(readingBlock, /CFC Persian Glyphs/);
+  assertNoEmptySelectorRule(css);
+  assertNoMalformedSelectorList(css);
+  assertNoAccidentalGlobalElementSelectors(css);
+});
+
 test("a UiSurface with empty textDescendants does not generate a global descendant selector", () => {
   const platform = fixtureAdapterWith({
     uiSurfaces: [{ id: "fixture-ui", selectors: ["[data-fixture-ui]"], textDescendants: [] }],
   });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assert.match(css, /\[data-fixture-ui\] \{\n {2}font-family:/);
   assert.doesNotMatch(css, /:is\(\)/);
@@ -456,7 +504,7 @@ test("every selector group empty at once produces no reading/composer/editor/ui/
     },
   };
 
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   // Only the @font-face blocks (independent of adapter selectors) remain.
   assert.match(css, /@font-face/);
@@ -469,8 +517,8 @@ test("every selector group empty at once produces no reading/composer/editor/ui/
 test("generated CSS never contains a rule beginning with an empty selector (ChatGPT and fixtures)", () => {
   for (const css of [
     fontCss(),
-    buildConversationFontCss(getRegisteredFont("peyda"), fixtureAdapter),
-    buildConversationFontCss(getRegisteredFont("peyda"), fixtureAdapterWith({ conversationReading: [] })),
+    buildConversationFontCss(getRegisteredFont("estedad"), fixtureAdapter),
+    buildConversationFontCss(getRegisteredFont("estedad"), fixtureAdapterWith({ conversationReading: [] })),
   ]) {
     assertNoEmptySelectorRule(css);
   }
@@ -479,9 +527,9 @@ test("generated CSS never contains a rule beginning with an empty selector (Chat
 test("generated CSS never contains malformed comma-separated selector lists", () => {
   for (const css of [
     fontCss(),
-    buildConversationFontCss(getRegisteredFont("peyda"), fixtureAdapter),
-    buildConversationFontCss(getRegisteredFont("peyda"), fixtureAdapterWith({ composer: [] })),
-    buildConversationFontCss(getRegisteredFont("peyda"), fixtureAdapterWith({ exclusions: [] })),
+    buildConversationFontCss(getRegisteredFont("estedad"), fixtureAdapter),
+    buildConversationFontCss(getRegisteredFont("estedad"), fixtureAdapterWith({ composer: [] })),
+    buildConversationFontCss(getRegisteredFont("estedad"), fixtureAdapterWith({ exclusions: [] })),
   ]) {
     assertNoMalformedSelectorList(css);
   }
@@ -492,7 +540,7 @@ test("an empty parent selector never broadens into a global element selector lik
     canvasEditors: [],
     uiSurfaces: [{ id: "fixture-ui", selectors: [], textDescendants: ["span"] }],
   });
-  const css = buildConversationFontCss(getRegisteredFont("peyda"), platform);
+  const css = buildConversationFontCss(getRegisteredFont("estedad"), platform);
 
   assertNoAccidentalGlobalElementSelectors(css);
   assertNoEmptySelectorRule(css);
@@ -503,7 +551,10 @@ test("regression: ChatGPT-generated CSS still contains its meaningful selectors 
 
   assert.match(css, /\[data-message-author-role="assistant"\] \.markdown:not\(#prompt-textarea\)/);
   assert.match(css, /\[data-message-role="user"\] \[data-user-message-copy\]/);
-  assert.match(css, /#prompt-textarea \{\n {2}font-family:/);
+  assert.match(
+    css,
+    /#prompt-textarea,\n\[data-composer-markdown\]\[contenteditable="true"\]\[role="textbox"\] \{\n {2}font-family:/,
+  );
   assert.match(
     css,
     /\[data-writing-block-fullscreen-editor-region\],\n\[data-writing-block\] \.ProseMirror \{\n {2}font-family:/,
