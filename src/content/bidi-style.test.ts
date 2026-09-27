@@ -229,7 +229,9 @@ test("bidi CSS covers current, DIL, and Work chat conversation markup", () => {
 
   assert.match(selectors, /\[data-dil-widget-copy-target\] \[data-d-component="text"\]/);
   assert.match(selectors, /\[data-dil-widget-copy-target\] \[data-d-component="title"\]/);
+  assert.match(selectors, /\[data-dil-widget-copy-target\] \[data-d-component="shimmer-text"\]/);
   assert.match(selectors, /\[data-message-author-role="assistant"\] \[data-d-component="text"\]/);
+  assert.match(selectors, /\[data-d-component="shimmer-text"\]/);
   assert.match(selectors, /\.markdown\.markdown-new-styling[^\n]*:is\(/);
 
   const leafSelectors = selectors.split(",\n").filter((selector) => !selector.includes(" :is("));

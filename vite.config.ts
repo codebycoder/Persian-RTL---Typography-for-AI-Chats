@@ -47,6 +47,20 @@ function buildExtensionExtras(): Plugin {
         },
       });
 
+      await build({
+        configFile: false,
+        publicDir: false,
+        build: {
+          emptyOutDir: false,
+          outDir: distDir,
+          lib: {
+            entry: resolve(rootDir, "src/background/index.ts"),
+            formats: ["es"],
+            fileName: () => "background.js",
+          },
+        },
+      });
+
       copyFileSync(resolve(rootDir, "manifest.json"), resolve(distDir, "manifest.json"));
       cpSync(resolve(rootDir, "fonts"), resolve(distDir, "fonts"), { recursive: true });
     },
@@ -54,7 +68,7 @@ function buildExtensionExtras(): Plugin {
 }
 
 export default defineConfig({
-  root: resolve(rootDir, "src/popup"),
+  root: resolve(rootDir, "src/sidepanel"),
   base: "./",
   publicDir: resolve(rootDir, "public"),
   resolve: {
@@ -68,10 +82,10 @@ export default defineConfig({
       polyfill: false,
     },
     rollupOptions: {
-      input: resolve(rootDir, "src/popup/popup.html"),
+      input: resolve(rootDir, "src/sidepanel/sidepanel.html"),
       output: {
-        entryFileNames: "popup.js",
-        assetFileNames: "popup[extname]",
+        entryFileNames: "sidepanel.js",
+        assetFileNames: "sidepanel[extname]",
       },
     },
   },

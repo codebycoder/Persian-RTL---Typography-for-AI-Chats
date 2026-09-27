@@ -1,0 +1,651 @@
+/* Semantic tokens from the project-root rasta-color-palette.json. Stronger blue/secondary tokens
+   provide accessible text, focus, and control boundaries in each appearance. */
+@font-face {
+  font-family: "CFC Vazirmatn";
+  src: url("../../fonts/Vazirmatn-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+  --color-primary: #1152f4;
+  --color-primary-hover: #0d39e8;
+  --color-primary-active: #0827c7;
+  --color-accent: #2edcf3;
+  --color-accent-soft: #b8f8fc;
+  --color-success: #16c47f;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-background: #f7faff;
+  --color-surface: #ffffff;
+  --color-surface-alt: #eef4ff;
+  --color-border: #d9e5ff;
+  --color-text: #0d172a;
+  --color-secondary: #5b6b8a;
+  --color-control-border: var(--color-secondary);
+  --color-focus: var(--color-primary);
+  --color-action-text: var(--color-primary-hover);
+  --color-on-primary: #ffffff;
+  --font-ui: "CFC Vazirmatn", Vazirmatn, Tahoma, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #081120;
+    --color-surface: #0d1b34;
+    --color-surface-alt: #122444;
+    --color-border: #213a6a;
+    --color-text: #f8fafc;
+    --color-secondary: #9fb2d1;
+    --color-focus: #49a3ff;
+    --color-action-text: #49a3ff;
+  }
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  color: var(--color-text);
+  background: var(--color-background);
+  font-family: var(--font-ui);
+}
+
+body {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  touch-action: manipulation;
+}
+
+button, input {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+  cursor: pointer;
+}
+
+button:disabled, input:disabled {
+  cursor: not-allowed;
+}
+
+button:disabled {
+  color: var(--color-secondary);
+}
+
+h1, h2, p {
+  margin: 0;
+}
+
+h2, strong {
+  font-weight: 500;
+}
+
+.panel {
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  border-radius: 10px;
+}
+
+.heading {
+  min-width: 0;
+}
+
+h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.description, .power-description, .field-hint, .upload-hint {
+  color: var(--color-secondary);
+  font-size: 0.75rem;
+}
+
+.settings, .tab-panel, .live-controls {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.tab-button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-secondary);
+  font-weight: 500;
+}
+
+.tab-button:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.tab-button[aria-selected="true"] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.tab-button[aria-selected="true"]:hover {
+  background: var(--color-primary-hover);
+}
+
+.tab-button[aria-selected="true"]:active {
+  background: var(--color-primary-active);
+}
+
+.power {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-block-end: 12px;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.power-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.power-title {
+  font-weight: 500;
+}
+
+.power-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.power-state {
+  font-size: 0.75rem;
+  color: var(--color-secondary);
+}
+
+.switch {
+  position: relative;
+  display: grid;
+  align-items: center;
+  width: 44px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.switch-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch-ui {
+  display: block;
+  position: relative;
+  height: 26px;
+  border: 1px solid var(--color-control-border);
+  border-radius: 24px;
+  background: var(--color-secondary);
+}
+
+.switch-ui::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-background);
+  transition: transform 140ms ease;
+}
+
+.switch-input:checked + .switch-ui {
+  background: var(--color-primary);
+}
+
+.switch-input:checked + .switch-ui::before {
+  background: var(--color-on-primary);
+  transform: translateX(-18px);
+}
+
+.switch-input:disabled + .switch-ui {
+  border-style: dashed;
+}
+
+.font-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.field-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.font-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.font-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-control-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  text-align: start;
+}
+
+.font-picker-trigger:hover:not(:disabled) {
+  border-color: var(--color-focus);
+  background: var(--color-surface-alt);
+}
+
+.font-picker[data-open="true"] .font-picker-trigger {
+  border-color: var(--color-focus);
+}
+
+.font-picker-copy, .font-option-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.font-picker-value, .font-option-name {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.font-picker-meta, .font-option-meta {
+  color: var(--color-secondary);
+  font-size: 0.75rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.font-picker-meta {
+  text-align: right;
+}
+
+.font-picker-chevron {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--color-secondary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.font-picker[data-open="true"] .font-picker-chevron {
+  transform: rotate(180deg);
+}
+
+.font-picker-popover {
+  position: absolute;
+  inset-block-start: calc(100% + 4px);
+  inset-inline: 0;
+  z-index: 10;
+  padding: 4px;
+  border: 1px solid var(--color-control-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: 0 4px 12px #08112018;
+}
+
+.font-picker-list {
+  display: grid;
+  gap: 4px;
+  max-height: min(240px, 40vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  scrollbar-width: thin;
+}
+
+.font-option {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.font-option:hover {
+  background: var(--color-surface-alt);
+}
+
+.font-option[aria-selected="true"] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.font-option[aria-selected="true"] .font-option-meta {
+  color: var(--color-on-primary);
+}
+
+.font-option-sample {
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+.font-option-meta {
+  text-align: right;
+}
+
+.font-option-check {
+  visibility: hidden;
+}
+
+.font-option[aria-selected="true"] .font-option-check {
+  visibility: visible;
+}
+
+.font-picker-trigger:disabled {
+  background: var(--color-surface-alt);
+  border-style: dashed;
+}
+
+.preview {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--color-surface-alt);
+}
+
+.preview-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-secondary);
+}
+
+.preview-kicker {
+  font-size: 0.75rem;
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.preview-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  margin-inline-start: auto;
+  flex-shrink: 0;
+}
+
+.preview-load {
+  font-size: 0.75rem;
+}
+
+.preview-fa {
+  font-size: 1rem;
+  line-height: 1.8;
+  font-weight: 500;
+}
+
+.preview-en {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.preview-mixed {
+  font-size: 0.75rem;
+  line-height: 1.8;
+}
+
+[data-preview-sample] {
+  overflow-wrap: anywhere;
+}
+
+.custom-font {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.custom-font-heading h2 {
+  font-size: 0.875rem;
+}
+
+.custom-font-heading p {
+  margin-top: 4px;
+  color: var(--color-secondary);
+  font-size: 0.75rem;
+}
+
+.button {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: 500;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.button:active:not(:disabled) {
+  background: var(--color-primary-active);
+}
+
+.button:disabled {
+  background: var(--color-surface-alt);
+}
+
+.upload-hint {
+  text-align: center;
+}
+
+.custom-font-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--color-surface-alt);
+}
+
+.file-icon {
+  color: var(--color-secondary);
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.custom-font-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.custom-font-copy span {
+  color: var(--color-secondary);
+  font-size: 0.75rem;
+}
+
+.remove-button, .retry-button {
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-control-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.remove-button:hover {
+  border-color: var(--color-danger);
+}
+
+.retry-button {
+  color: var(--color-action-text);
+}
+
+.retry-button:hover {
+  background: var(--color-surface-alt);
+}
+
+.privacy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-block: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.privacy-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  fill: none;
+  stroke: var(--color-secondary);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.privacy-note strong {
+  font-size: 0.75rem;
+}
+
+.privacy-note p {
+  margin-top: 4px;
+  color: var(--color-secondary);
+  font-size: 0.75rem;
+}
+
+.feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.status {
+  flex: 1;
+  color: var(--color-secondary);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.feedback[data-kind="error"], .feedback[data-kind="warning"] {
+  padding-inline-start: 12px;
+  border-inline-start: 3px solid var(--color-warning);
+}
+
+.feedback[data-kind="error"] {
+  border-color: var(--color-danger);
+}
+
+.feedback[data-kind="error"] .status {
+  color: var(--color-text);
+}
+
+button:focus-visible, .font-option:focus-visible, .switch-input:focus-visible + .switch-ui {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 340px) {
+  .panel {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .tab-button[aria-selected="true"], .font-option[aria-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .switch-ui {
+    forced-color-adjust: none;
+    background: Canvas;
+    border-color: CanvasText;
+  }
+  .switch-ui::before {
+    background: CanvasText;
+  }
+  .switch-input:checked + .switch-ui {
+    background: Highlight;
+  }
+  .switch-input:checked + .switch-ui::before {
+    background: HighlightText;
+  }
+}
+
+/* A narrow resized panel should stack controls instead of squeezing Persian words. */
+@media (max-width: 279px) {
+  .panel { padding: 12px; }
+  .power { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .power-side { align-self: flex-end; }
+  .feedback { align-items: stretch; flex-direction: column; }
+  .retry-button { align-self: flex-start; }
+  .custom-font-details { flex-wrap: wrap; }
+  .custom-font-copy { flex-basis: calc(100% - 32px); }
+}

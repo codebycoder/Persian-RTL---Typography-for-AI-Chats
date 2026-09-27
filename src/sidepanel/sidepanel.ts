@@ -11,8 +11,8 @@ import {
   FONT_REGISTRY,
   buildFontFaceCss,
   buildFontFamilyStack,
-  getRegisteredFont,
   isFontId,
+  quoteCssFontFamily,
 } from "@shared/font-registry";
 import {
   DEFAULT_FONT_SETTINGS,
@@ -31,8 +31,9 @@ const fontValue = document.querySelector("[data-font-value]");
 const fontPickerMeta = document.querySelector("[data-font-picker-meta]");
 const fontPopover = document.querySelector("[data-font-popover]");
 const fontOptions = document.querySelector("[data-font-options]");
-const previewFa = document.querySelector("[data-preview-fa]");
-const previewEn = document.querySelector("[data-preview-en]");
+const previewSamples = document.querySelectorAll<HTMLElement>("[data-preview-sample]");
+const previewLoad = document.querySelector("[data-preview-load]");
+const fontHint = document.querySelector("[data-font-hint]");
 const previewFontStyle = document.querySelector("[data-preview-font-style]");
 const uploadButton = document.querySelector("[data-upload-button]");
 const fontFileInput = document.querySelector("[data-font-file]");
@@ -41,14 +42,26 @@ const customFontName = document.querySelector("[data-custom-font-name]");
 const customFontMeta = document.querySelector("[data-custom-font-meta]");
 const removeCustomButton = document.querySelector("[data-remove-custom]");
 const statusElement = document.querySelector("[data-status]");
+const feedback = document.querySelector("[data-feedback]");
+const retryButton = document.querySelector("[data-retry]");
 const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-tab-button]"));
 const tabPanels = Array.from(document.querySelectorAll<HTMLElement>("[data-tab-panel]"));
 
 let currentSettings = DEFAULT_FONT_SETTINGS;
+let savedSettings = DEFAULT_FONT_SETTINGS;
+let initialized = false;
+let saving = false;
+let uploading = false;
+let feedbackVersion = 0;
+let previewVersion = 0;
+let retryAction: (() => Promise<void>) | null = null;
+let focusAfterBusy: HTMLElement | null = null;
+let panelWindowId: number | undefined;
+let preferenceError = false;
 
-type PopupTabId = "font" | "settings";
+type PanelTabId = "font" | "settings";
 
-function isPopupTabId(value: string | undefined): value is PopupTabId {
+function isPanelTabId(value: string | undefined): value is PanelTabId {
   return value === "font" || value === "settings";
 }
 
@@ -89,16 +102,23 @@ function applyPreviewFont(settings: FontSettings): void {
           resolveAssetUrl,
         )
       : "";
-    previewFontStyle.textContent = [...builtInFontCss, customFontCss]
-      .filter(Boolean)
-      .join("\n\n");
+    const css = [...builtInFontCss, customFontCss].filter(Boolean).join("\n\n");
+    if (previewFontStyle.textContent !== css) previewFontStyle.textContent = css;
   }
-  if (previewFa instanceof HTMLElement) {
-    previewFa.style.fontFamily = stack;
-  }
-  if (previewEn instanceof HTMLElement) {
-    previewEn.style.fontFamily = stack;
-  }
+  for (const sample of Array.from(previewSamples)) sample.style.fontFamily = stack;
+  const version = ++previewVersion;
+  if (previewLoad) previewLoad.textContent = "در حال بارگیری…";
+  // FontFaceSet.load returns actual matching faces; check() alone can accept fallback.
+  void document.fonts.load(`16px ${quoteCssFontFamily(font.cssFamilyAlias)}`, "خواندن").then(
+    (faces) => {
+      if (version !== previewVersion || !previewLoad) return;
+      previewLoad.textContent = faces.length ? "" : "فونت در دسترس نیست؛ پنجره را دوباره باز کنید.";
+    },
+    () => {
+      if (version !== previewVersion || !previewLoad) return;
+      previewLoad.textContent = "بارگیری نشد؛ پنجره را دوباره باز کنید.";
+    },
+  );
 }
 
 function isAvailableFontId(value: string): value is FontSettings["fontId"] {
@@ -141,7 +161,9 @@ function openFontPicker(position: "selected" | "first" | "last" = "selected"): v
 }
 
 function selectFont(fontId: string): void {
-  if (!isAvailableFontId(fontId)) return;
+  if (!initialized || saving || uploading || !currentSettings.enabled || !isAvailableFontId(fontId)) {
+    return;
+  }
   closeFontPicker(true);
   if (fontId === currentSettings.fontId) return;
   void persist({ ...currentSettings, fontId });
@@ -176,7 +198,10 @@ function handleFontOptionKeydown(event: KeyboardEvent): void {
     return;
   }
 
-  if (event.key === "Tab") closeFontPicker();
+  if (event.key === "Tab") {
+    // Restore the trigger before native Tab navigation, so focus never falls to body.
+    closeFontPicker(true);
+  }
 }
 
 function createFontOption(
@@ -203,10 +228,12 @@ function createFontOption(
   const title = document.createElement("strong");
   title.className = "font-option-name";
   title.textContent = name;
-  title.style.fontFamily = fontFamily;
+  title.dir = "auto";
   const meta = document.createElement("span");
   meta.className = "font-option-meta";
   meta.textContent = description;
+  meta.dir = fontId === CUSTOM_FONT_ID ? "rtl" : "ltr";
+  meta.lang = fontId === CUSTOM_FONT_ID ? "fa" : "en";
   copy.append(title, meta);
 
   const check = document.createElement("span");
@@ -222,23 +249,19 @@ function createFontOption(
 
 function renderFontPicker(settings: FontSettings): void {
   const selectedFont = resolveSettingsFont(settings);
-  const selectedName =
-    settings.fontId === CUSTOM_FONT_ID && settings.customFont
-      ? settings.customFont.name
-      : getRegisteredFont(settings.fontId === CUSTOM_FONT_ID ? "vazirmatn" : settings.fontId)
-          .displayNameFa;
-
   if (fontValue instanceof HTMLElement) {
-    fontValue.textContent = selectedName;
-    fontValue.style.fontFamily = buildFontFamilyStack(selectedFont);
+    fontValue.textContent = selectedFont.displayNameFa;
   }
-  if (fontPickerMeta) {
-    fontPickerMeta.textContent = settings.fontId === CUSTOM_FONT_ID ? "فونت شخصی" : "فونت آماده";
+  if (fontPickerMeta instanceof HTMLElement) {
+    fontPickerMeta.textContent =
+      settings.fontId === CUSTOM_FONT_ID ? "فونت شخصی" : selectedFont.displayNameEn;
+    fontPickerMeta.dir = settings.fontId === CUSTOM_FONT_ID ? "rtl" : "ltr";
+    fontPickerMeta.lang = settings.fontId === CUSTOM_FONT_ID ? "fa" : "en";
   }
   if (!(fontOptions instanceof HTMLElement)) return;
 
   const options = FONT_REGISTRY.map((font) =>
-    createFontOption(font.id, font.displayNameFa, "فونت آماده", buildFontFamilyStack(font)),
+    createFontOption(font.id, font.displayNameFa, font.displayNameEn, buildFontFamilyStack(font)),
   );
   if (settings.customFont) {
     const customFont = resolveSettingsFont({ ...settings, fontId: CUSTOM_FONT_ID });
@@ -284,12 +307,50 @@ function initializeFontPicker(): void {
   });
 }
 
-function renderStatus(message: string, kind: "ok" | "warning" | "error" = "ok"): void {
+function renderStatus(
+  message: string,
+  kind: "ok" | "warning" | "error" = "ok",
+  retry: (() => Promise<void>) | null = null,
+): void {
   if (!(statusElement instanceof HTMLElement)) return;
-  statusElement.hidden = message.length === 0;
   statusElement.textContent = message;
-  if (message) statusElement.dataset.kind = kind;
-  else statusElement.removeAttribute("data-kind");
+  statusElement.setAttribute("aria-live", kind === "error" ? "assertive" : "polite");
+  if (feedback instanceof HTMLElement) {
+    feedback.hidden = message.length === 0;
+    feedback.dataset.kind = kind;
+  }
+  retryAction = retry;
+  if (retryButton instanceof HTMLButtonElement) retryButton.hidden = !retry;
+}
+
+function syncControls(): void {
+  const busy = !initialized || saving || uploading;
+  const active = document.activeElement;
+  if (
+    busy && active instanceof HTMLElement &&
+    [enabledToggle, fontTrigger, uploadButton, removeCustomButton].includes(active)
+  ) {
+    focusAfterBusy = active;
+  }
+  if (settingsForm instanceof HTMLElement) settingsForm.setAttribute("aria-busy", String(busy));
+  if (isCheckbox(enabledToggle)) enabledToggle.disabled = busy;
+  if (fontTrigger instanceof HTMLButtonElement) {
+    fontTrigger.disabled = busy || !currentSettings.enabled;
+  }
+  if (uploadButton instanceof HTMLButtonElement) uploadButton.disabled = busy;
+  if (removeCustomButton instanceof HTMLButtonElement) removeCustomButton.disabled = busy;
+  if (!busy) {
+    const target = focusAfterBusy;
+    focusAfterBusy = null;
+    // A slow native disable blurs the control. Restore it only if the user has
+    // not moved elsewhere while the operation was pending.
+    if (
+      target && document.activeElement === document.body &&
+      !target.hasAttribute("disabled") && target.getClientRects().length > 0
+    ) {
+      target.focus();
+    }
+  }
 }
 
 function renderEnabledUi(enabled: boolean): void {
@@ -301,7 +362,12 @@ function renderEnabledUi(enabled: boolean): void {
   if (settingsForm instanceof HTMLElement) {
     settingsForm.dataset.enabled = enabled ? "true" : "false";
   }
-  if (fontTrigger instanceof HTMLButtonElement) fontTrigger.disabled = !enabled;
+  if (fontHint) {
+    fontHint.textContent = enabled
+      ? "تغییرات به‌صورت خودکار ذخیره و اعمال می‌شوند."
+      : "تغییر فونت خاموش است؛ انتخابت برای بعد حفظ می‌شود.";
+  }
+  syncControls();
   if (!enabled) closeFontPicker();
 }
 
@@ -315,13 +381,13 @@ function renderCustomFont(customFont: StoredCustomFont | null): void {
   }
   if (uploadButton instanceof HTMLElement) {
     uploadButton.textContent = customFont ? "جایگزینی فونت" : "افزودن فونت";
-    uploadButton.removeAttribute("aria-busy");
   }
 }
 
 function setUploadBusy(busy: boolean): void {
   if (!(uploadButton instanceof HTMLButtonElement)) return;
-  uploadButton.disabled = busy;
+  uploading = busy;
+  syncControls();
   if (busy) {
     uploadButton.setAttribute("aria-busy", "true");
     uploadButton.textContent = "در حال افزودن…";
@@ -331,7 +397,7 @@ function setUploadBusy(busy: boolean): void {
   uploadButton.textContent = currentSettings.customFont ? "جایگزینی فونت" : "افزودن فونت";
 }
 
-function activateTab(tabId: PopupTabId, moveFocus = false): void {
+function activateTab(tabId: PanelTabId, moveFocus = false): void {
   closeFontPicker();
   for (const button of tabButtons) {
     const selected = button.dataset.tabButton === tabId;
@@ -348,7 +414,7 @@ function initializeTabs(): void {
   for (const [index, button] of tabButtons.entries()) {
     button.addEventListener("click", () => {
       const tabId = button.dataset.tabButton;
-      if (isPopupTabId(tabId)) activateTab(tabId);
+      if (isPanelTabId(tabId)) activateTab(tabId);
     });
 
     button.addEventListener("keydown", (event) => {
@@ -363,7 +429,7 @@ function initializeTabs(): void {
 
       const target = tabButtons[targetIndex];
       const tabId = target?.dataset.tabButton;
-      if (!target || !isPopupTabId(tabId)) return;
+      if (!target || !isPanelTabId(tabId)) return;
       event.preventDefault();
       activateTab(tabId, true);
     });
@@ -379,43 +445,104 @@ function renderSettings(settings: FontSettings): void {
 }
 
 async function persist(settings: FontSettings): Promise<void> {
+  if (!initialized || saving) return;
   const parsed = parseFontSettings(settings);
-  await saveFontSettings(parsed);
-  renderSettings(parsed);
-  await reportApplyResult();
+  preferenceError = false;
+  ++feedbackVersion;
+  saving = true;
+  closeFontPicker();
+  renderSettings(parsed); // Preview responds immediately; storage may still be pending.
+  renderStatus("در حال ذخیره…");
+  try {
+    await saveFontSettings(parsed);
+    savedSettings = parsed;
+  } catch {
+    preferenceError = true;
+    renderSettings(savedSettings);
+    renderStatus(
+      "ذخیره نشد؛ تنظیمات قبلی حفظ شد. دوباره تلاش کنید.",
+      "error",
+      () => persist(parsed),
+    );
+    return;
+  } finally {
+    saving = false;
+    syncControls();
+  }
+  await reportApplyResult(true);
 }
 
-async function requestApplyOnActiveTab(): Promise<boolean> {
-  if (!chrome.tabs?.query || !chrome.tabs.sendMessage) return false;
+type ApplyResult = "applied" | "unsupported" | "unconfirmed" | "failed";
 
+async function requestApplyOnActiveTab(): Promise<ApplyResult> {
+  if (!chrome.tabs?.query || !chrome.tabs.sendMessage) return "unconfirmed";
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (typeof tab?.id !== "number") return false;
-
+    const [tab] = await chrome.tabs.query({ active: true, windowId: panelWindowId });
+    if (typeof tab?.id !== "number") return "unconfirmed";
+    // URLs may be withheld without tabs permission. Only classify when available,
+    // using the existing manifest rather than maintaining another platform list.
+    if (tab.url) {
+      const url = new URL(tab.url);
+      const matches = chrome.runtime.getManifest().content_scripts
+        ?.flatMap((script) => script.matches ?? []) ?? [];
+      const supported = matches.some((match) => {
+        const pattern = new URL(match);
+        return pattern.protocol === url.protocol && pattern.hostname === url.hostname;
+      });
+      if (!supported) return "unsupported";
+    }
     const response: unknown = await chrome.tabs.sendMessage(tab.id, {
       type: APPLY_CURRENT_SETTINGS_MESSAGE,
     });
-    return (
-      typeof response === "object" &&
-      response !== null &&
-      "applied" in response &&
-      response.applied === true
-    );
+    if (typeof response === "object" && response !== null && "applied" in response) {
+      if (response.applied === false) return "failed";
+      if (
+        response.applied === true &&
+        "platform" in response && typeof response.platform === "string" && response.platform.length > 0
+      ) {
+        return "applied";
+      }
+    }
+    return "unconfirmed";
   } catch {
-    return false;
+    return "unconfirmed";
   }
 }
 
-async function reportApplyResult(): Promise<void> {
-  const applied = await requestApplyOnActiveTab();
-  if (applied) {
-    renderStatus("روی این تب اعمال شد.");
-    return;
+async function reportApplyResult(justSaved = false): Promise<void> {
+  const version = ++feedbackVersion;
+  const prefix = justSaved ? "ذخیره شد. " : "";
+  renderStatus(`${prefix}در حال بررسی تب…`);
+  // A missing content-script response must not leave the panel waiting forever.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    requestApplyOnActiveTab(),
+    new Promise<ApplyResult>((resolve) => {
+      timer = setTimeout(() => resolve("unconfirmed"), 4000);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (version !== feedbackVersion) return;
+  if (result === "applied") {
+    const message = currentSettings.enabled
+      ? "روی این تب اعمال شد."
+      : "تغییر فونت در این تب خاموش شد.";
+    renderStatus(`${prefix}${message}`);
+  } else if (result === "unsupported") {
+    renderStatus(`${prefix}این صفحه پشتیبانی نمی‌شود؛ چت‌جی‌پی‌تی یا کلود را باز کنید.`);
+  } else if (result === "failed") {
+    renderStatus(
+      `${prefix}اعمال روی تب انجام نشد؛ دوباره تلاش کنید.`,
+      "error",
+      () => reportApplyResult(justSaved),
+    );
+  } else {
+    renderStatus(
+      `${prefix}اتصال به تب تأیید نشد؛ تب چت‌جی‌پی‌تی یا کلود را تازه‌سازی کنید.`,
+      "warning",
+      () => reportApplyResult(justSaved),
+    );
   }
-  renderStatus(
-    "یک تب چت‌جی‌پی‌تی یا کلود را باز یا تازه‌سازی کنید؛ فونت ذخیره‌شده خودکار اعمال می‌شود.",
-    "warning",
-  );
 }
 
 function fileToDataUrl(file: File, format: StoredCustomFont["format"]): Promise<string> {
@@ -437,16 +564,21 @@ async function validateBrowserCanLoadFont(file: File): Promise<void> {
 }
 
 async function importCustomFont(file: File): Promise<void> {
+  if (!initialized || saving || uploading) return;
+  preferenceError = false;
+  ++feedbackVersion;
   renderStatus("");
   setUploadBusy(true);
   try {
     if (file.size <= 0 || file.size > MAX_CUSTOM_FONT_BYTES) {
+      preferenceError = true;
       renderStatus("لطفاً یک فایل فونت کوچک‌تر از ۴ مگابایت انتخاب کنید.", "error");
       return;
     }
 
     const format = detectFontFormat(new Uint8Array(await file.slice(0, 4).arrayBuffer()));
     if (!format) {
+      preferenceError = true;
       renderStatus("این فایل فونت پشتیبانی نمی‌شود؛ فرمت‌های مجاز WOFF2، WOFF، TTF و OTF هستند.", "error");
       return;
     }
@@ -465,24 +597,50 @@ async function importCustomFont(file: File): Promise<void> {
       fontId: CUSTOM_FONT_ID,
       customFont,
     };
-    await saveFontSettings(settings);
-    renderSettings(settings);
-    const applied = await requestApplyOnActiveTab();
-    renderStatus(
-      applied
-        ? `فونت «${customFont.name}» آماده و روی این تب اعمال شد.`
-        : `فونت «${customFont.name}» ذخیره شد؛ تب چت‌جی‌پی‌تی یا کلود را یک‌بار تازه‌سازی کنید.`,
-      applied ? "ok" : "warning",
-    );
+    await persist(settings);
   } catch {
-    renderStatus("مرورگر نتوانست این فونت را بخواند؛ فایل دیگری را امتحان کنید.", "error");
+    preferenceError = true;
+    renderStatus("مرورگر نتوانست این فونت را بخواند؛ فایل دیگری را انتخاب کنید.", "error");
   } finally {
     setUploadBusy(false);
   }
 }
 
-function initializePopup(): void {
-  if (!chrome.runtime?.id) return;
+async function initializeSettings(): Promise<void> {
+  renderStatus("در حال خواندن تنظیمات…");
+  try {
+    const [settings, panelWindow] = await Promise.all([
+      loadFontSettings(),
+      chrome.windows.getCurrent(),
+    ]);
+    panelWindowId = panelWindow.id;
+    initialized = true;
+    savedSettings = settings;
+    renderSettings(settings);
+    await reportApplyResult();
+  } catch {
+    renderStatus("تنظیمات خوانده نشد؛ دوباره تلاش کنید.", "error", initializeSettings);
+  }
+}
+
+function initializePanel(): void {
+  applyPreviewFont(DEFAULT_FONT_SETTINGS);
+  if (!chrome.runtime?.id) {
+    renderStatus("افزونه در دسترس نیست؛ پنجره را دوباره باز کنید.", "error");
+    return;
+  }
+  settingsForm?.addEventListener("submit", (event) => event.preventDefault());
+  retryButton?.addEventListener("click", () => {
+    const retry = retryAction;
+    retryAction = null;
+    if (retry) {
+      void retry().finally(() => {
+        if (document.activeElement !== document.body) return;
+        if (retryButton instanceof HTMLElement && !retryButton.hidden) retryButton.focus();
+        else tabButtons.find((button) => button.getAttribute("aria-selected") === "true")?.focus();
+      });
+    }
+  });
 
   initializeTabs();
   initializeFontPicker();
@@ -504,6 +662,9 @@ function initializePopup(): void {
 
   if (removeCustomButton instanceof HTMLButtonElement) {
     removeCustomButton.addEventListener("click", () => {
+      if (!initialized || saving || uploading) return;
+      // The remove button disappears after success; keep keyboard focus in Settings.
+      if (uploadButton instanceof HTMLButtonElement) uploadButton.focus();
       void persist({
         ...currentSettings,
         fontId: currentSettings.fontId === CUSTOM_FONT_ID ? "vazirmatn" : currentSettings.fontId,
@@ -512,11 +673,40 @@ function initializePopup(): void {
     });
   }
 
-  subscribeToFontSettings(renderSettings);
-  void loadFontSettings().then((settings) => {
+  const unsubscribeSettings = subscribeToFontSettings((settings) => {
+    if (!initialized || saving) return;
+    ++feedbackVersion;
+    preferenceError = false;
+    savedSettings = settings;
+    closeFontPicker();
     renderSettings(settings);
-    void reportApplyResult();
+    renderStatus("تنظیمات ذخیره‌شده به‌روز شد.");
   });
+
+  // Unlike a popup, this document stays open across tab switches and navigation.
+  // Invalidate old acknowledgements immediately, but retain storage/upload errors.
+  function refreshTabFeedback(loading = false): void {
+    ++feedbackVersion;
+    if (!initialized || saving || uploading || preferenceError) return;
+    if (loading) renderStatus("در حال بارگیری صفحه…");
+    else void reportApplyResult();
+  }
+  const onActivated: Parameters<typeof chrome.tabs.onActivated.addListener>[0] = (info) => {
+    if (info.windowId === panelWindowId) refreshTabFeedback();
+  };
+  const onUpdated: Parameters<typeof chrome.tabs.onUpdated.addListener>[0] = (_tabId, change, tab) => {
+    if (!tab.active || tab.windowId !== panelWindowId) return;
+    if (change.status === "loading") refreshTabFeedback(true);
+    if (change.status === "complete") refreshTabFeedback();
+  };
+  chrome.tabs.onActivated.addListener(onActivated);
+  chrome.tabs.onUpdated.addListener(onUpdated);
+  window.addEventListener("pagehide", () => {
+    unsubscribeSettings();
+    chrome.tabs.onActivated.removeListener(onActivated);
+    chrome.tabs.onUpdated.removeListener(onUpdated);
+  }, { once: true });
+  void initializeSettings();
 }
 
-initializePopup();
+initializePanel();

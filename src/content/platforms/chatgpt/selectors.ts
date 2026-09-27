@@ -29,7 +29,11 @@
  * 4. Logged-in DIL renderer (verified 2026-09-08): assistant reading text
  *    renders as semantic components such as `p[data-d-component="text"]`,
  *    `h3[data-d-component="title"]`, and `div[data-d-component="badge"]`
- *    inside `[data-dil-widget-copy-target]`.
+ *    inside `[data-dil-widget-copy-target]`. Thinking / reasoning steps
+ *    (verified 2026-09) stream labels in `span[data-d-component="shimmer-text"]`
+ *    inside the DIL response tree (`DilResponseRoot` / `LegacyReveal`) and
+ *    often inside `button[data-d-component="pressable"]` before the final
+ *    answer is mounted in the copy target.
  *    There is no `.markdown`, `[data-assistant-markdown]`, or
  *    `data-message-role` on this markup. Embedded `[data-writing-block]`
  *    editors use bare `ProseMirror.markdown` paragraphs without
@@ -115,9 +119,21 @@ export const CONVERSATION_READING_SELECTORS = [
   '[data-dil-widget-copy-target] [data-d-component="text"]',
   '[data-dil-widget-copy-target] [data-d-component="title"]',
   '[data-dil-widget-copy-target] [data-d-component="badge"]',
+  '[data-dil-widget-copy-target] [data-d-component="shimmer-text"]',
   '[data-message-author-role="assistant"] [data-d-component="text"]',
   '[data-message-author-role="assistant"] [data-d-component="title"]',
   '[data-message-author-role="assistant"] [data-d-component="badge"]',
+  '[data-message-author-role="assistant"] [data-d-component="shimmer-text"]',
+  '[data-message-role="assistant"] [data-d-component="shimmer-text"]',
+  '[data-turn-key] [data-d-component="shimmer-text"]',
+  // Expanded thinking step copy sits in a sibling box under the pressable header.
+  '[data-d-component="pressable"] ~ [data-d-component="box"] [data-d-component="text"]',
+  '[data-d-component="pressable"] ~ [data-d-component="box"] [data-d-component="title"]',
+  // DIL thinking labels can render outside message-role wrappers.
+  '[data-d-component="shimmer-text"]',
+  '[data-message-role="assistant"] [data-d-component="text"]',
+  '[data-message-role="assistant"] [data-d-component="title"]',
+  '[data-message-role="assistant"] [data-d-component="badge"]',
   // Work chat (reported 2026-09): Markdown renders outside message-role
   // wrappers in `.markdown.markdown-new-styling` containers.
   ".markdown.markdown-new-styling",

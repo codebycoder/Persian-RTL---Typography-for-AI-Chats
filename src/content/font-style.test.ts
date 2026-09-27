@@ -193,9 +193,15 @@ test("conversation CSS covers logged-in DIL assistant reading components", () =>
   assert.match(css, /\[data-dil-widget-copy-target\] \[data-d-component="text"\]/);
   assert.match(css, /\[data-dil-widget-copy-target\] \[data-d-component="title"\]/);
   assert.match(css, /\[data-dil-widget-copy-target\] \[data-d-component="badge"\]/);
+  assert.match(css, /\[data-dil-widget-copy-target\] \[data-d-component="shimmer-text"\]/);
   assert.match(css, /\[data-dil-widget-copy-target\] \[data-d-component="code"\]/);
   assert.match(css, /\[data-message-author-role="assistant"\] \[data-d-component="text"\]/);
   assert.match(css, /\[data-message-author-role="assistant"\] \[data-d-component="badge"\]/);
+  assert.match(css, /\[data-d-component="shimmer-text"\]/);
+  assert.match(
+    css,
+    /\[data-d-component="pressable"\] ~ \[data-d-component="box"\] \[data-d-component="text"\]/,
+  );
 
   // Target semantic DIL components directly; do not restyle the whole widget root.
   assert.doesNotMatch(css, /\[data-dil-widget-copy-target\]:not\(/);

@@ -71,6 +71,19 @@ test("assistant reading selectors are preserved across frontend generations", ()
   );
   assert.ok(
     CONVERSATION_READING_SELECTORS.includes(
+      '[data-dil-widget-copy-target] [data-d-component="shimmer-text"]',
+    ),
+  );
+  assert.ok(
+    CONVERSATION_READING_SELECTORS.includes('[data-d-component="shimmer-text"]'),
+  );
+  assert.ok(
+    CONVERSATION_READING_SELECTORS.includes(
+      '[data-d-component="pressable"] ~ [data-d-component="box"] [data-d-component="text"]',
+    ),
+  );
+  assert.ok(
+    CONVERSATION_READING_SELECTORS.includes(
       '[data-message-author-role="assistant"] [data-d-component="text"]',
     ),
   );
