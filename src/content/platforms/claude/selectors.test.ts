@@ -20,6 +20,9 @@ import {
   BIDI_LEAF_SELECTORS,
   CANVAS_EDITOR_SELECTORS,
   CLAUDE_COMPOSER_EDITOR,
+  CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
+  CLAUDE_DESIGN_CHAT_ROOT,
+  CLAUDE_DESIGN_USER_MESSAGE_ROOT,
   CLAUDE_SKILL_FILE_VIEWER,
   CLAUDE_UI_SURFACES,
   CODE_FONT_SELECTORS,
@@ -104,6 +107,34 @@ test("Claude skill file viewer uses the verified data-skill-file-viewer root", (
   assert.doesNotMatch(CLAUDE_SKILL_FILE_VIEWER, /font-claude-response|standard-markdown|_blocks_/);
 });
 
+test("Claude Design chat selectors target assistant Markdown and user copy only", () => {
+  assert.equal(
+    CLAUDE_DESIGN_CHAT_ROOT,
+    '[data-testid="chat-messages"][data-chat-id]',
+  );
+  assert.equal(
+    CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
+    `${CLAUDE_DESIGN_CHAT_ROOT} .om-assistant-group .om-md-content`,
+  );
+  assert.equal(
+    CLAUDE_DESIGN_USER_MESSAGE_ROOT,
+    `${CLAUDE_DESIGN_CHAT_ROOT} [data-index] span[style*="white-space: pre-wrap"]`,
+  );
+  assert.ok(CONVERSATION_READING_SELECTORS.includes(CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT));
+  assert.ok(CONVERSATION_READING_SELECTORS.includes(CLAUDE_DESIGN_USER_MESSAGE_ROOT));
+  assert.equal(isBidiWrapperSelector(CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT), true);
+  assert.equal(isBidiWrapperSelector(CLAUDE_DESIGN_USER_MESSAGE_ROOT), false);
+  assert.ok(BIDI_LEAF_SELECTORS.includes(CLAUDE_DESIGN_USER_MESSAGE_ROOT));
+
+  const selectors = conversationSelectors().join("\n");
+  assert.doesNotMatch(selectors, /data-chat-id="[^"]+"/);
+  assert.doesNotMatch(selectors, /data-msgfb|data-survey-card|ai-Lightning|ai-Caret/);
+  assert.equal(
+    (CONVERSATION_READING_SELECTORS as readonly string[]).includes(CLAUDE_DESIGN_CHAT_ROOT),
+    false,
+  );
+});
+
 test("Claude selectors do not use generated classes or random IDs", () => {
   const selectors = allClaudeSelectors().join("\n");
 
@@ -112,7 +143,15 @@ test("Claude selectors do not use generated classes or random IDs", () => {
   }
 
   for (const selector of CONVERSATION_READING_SELECTORS) {
-    assert.doesNotMatch(selector, /\.[A-Za-z_-]/);
+    const classTokens = [...selector.matchAll(/\.([A-Za-z_-][A-Za-z0-9_-]*)/g)].map(
+      (match) => match[1],
+    );
+    for (const token of classTokens) {
+      assert.ok(
+        token === "om-assistant-group" || token === "om-md-content",
+        `unexpected Claude class selector: ${token}`,
+      );
+    }
   }
 });
 
@@ -162,6 +201,8 @@ test("Claude sidebar UiSurface exists and uses verified conversation title attri
   assert.ok(sidebar, "expected a sidebar-chat-titles UiSurface");
   assert.deepEqual([...SIDEBAR_CHAT_TITLE_SELECTORS], [
     '[data-testid="sidebar"] [data-row-key^="chat:"] [data-row-label]',
+    '[data-testid="sidebar"] [data-select-row-key^="chat:"] [data-row-label]',
+    '[data-select-domain^="accordion:project:"] [data-select-row-key^="chat:"] [data-row-label]',
   ]);
   assert.deepEqual([...sidebar.selectors], [...SIDEBAR_CHAT_TITLE_SELECTORS]);
 
@@ -174,10 +215,10 @@ test("Claude sidebar UiSurface exists and uses verified conversation title attri
 test("Claude sidebar title selector generation covers the label and nested spans", () => {
   const selectors = buildUiSurfaceTextSelectors(CLAUDE_UI_SURFACES);
 
-  assert.ok(selectors.includes('[data-testid="sidebar"] [data-row-key^="chat:"] [data-row-label]'));
-  assert.ok(
-    selectors.includes('[data-testid="sidebar"] [data-row-key^="chat:"] [data-row-label] :is(span)'),
-  );
+  for (const titleSelector of SIDEBAR_CHAT_TITLE_SELECTORS) {
+    assert.ok(selectors.includes(titleSelector));
+    assert.ok(selectors.includes(`${titleSelector} :is(span)`));
+  }
   assert.deepEqual([...SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS], ["span"]);
 });
 
@@ -209,6 +250,13 @@ test("Claude sidebar selectors stay on chat titles and omit generated classes, U
     assert.doesNotMatch(selector, /\.[A-Za-z_-]/);
     assert.notEqual(selector.trim(), '[data-testid="sidebar"]');
     assert.notEqual(selector.trim(), '[data-row-key^="chat:"]');
+    assert.notEqual(selector.trim(), '[data-select-row-key^="chat:"]');
+    assert.ok(selector.includes("[data-row-label]"));
+    assert.ok(
+      selector.includes('[data-testid="sidebar"]') ||
+        selector.includes('[data-select-domain^="accordion:project:"]'),
+      `must scope chat titles to the sidebar or a project accordion: ${selector}`,
+    );
     assert.equal(/\bbutton\b/.test(selector), false, `must not target button: ${selector}`);
     assert.equal(/\bsvg\b/.test(selector), false, `must not target svg: ${selector}`);
     assert.equal(
@@ -222,7 +270,7 @@ test("Claude sidebar selectors stay on chat titles and omit generated classes, U
 test("Claude sidebar titles stay separate from conversation reading selectors", () => {
   for (const selector of CONVERSATION_READING_SELECTORS) {
     assert.equal(
-      selector.includes("data-row-label") || selector.includes("data-row-key"),
+      selector.includes("data-row-label") || /data-(?:select-)?row-key/.test(selector),
       false,
       "conversation selectors must stay separate from sidebar chrome",
     );
@@ -546,18 +594,22 @@ test("Claude UI surface selector generation does not emit a global or subtree-wi
   }
 });
 
-test("Claude code font and preservation use only generic semantic selectors", () => {
+test("Claude code font and preservation stay on verified reading roots", () => {
   const codeFont = CODE_FONT_SELECTORS.join("\n");
   const code = CODE_PRESERVE_SELECTORS.join("\n");
 
   assert.ok(codeFont.includes(`${ASSISTANT_ROW_ROOT} pre`));
   assert.ok(codeFont.includes(`${USER_MESSAGE_ROOT} pre`));
   assert.ok(codeFont.includes(`${CLAUDE_SKILL_FILE_VIEWER} pre`));
+  assert.ok(codeFont.includes(`${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre`));
   assert.ok(codeFont.includes(`${CLAUDE_COMPOSER_EDITOR} pre`));
   assert.match(code, /:is\(code, kbd, samp, tt\)/);
   assert.ok(code.includes(`${ASSISTANT_ROW_ROOT} :is(code, kbd, samp, tt):not(pre *)`));
   assert.ok(code.includes(`${USER_MESSAGE_ROOT} :is(code, kbd, samp, tt)`));
   assert.ok(code.includes(`${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt)`));
+  assert.ok(
+    code.includes(`${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(code, kbd, samp, tt)`),
+  );
   assert.ok(code.includes(`${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt)`));
   assert.doesNotMatch(
     code,
@@ -566,14 +618,21 @@ test("Claude code font and preservation use only generic semantic selectors", ()
 });
 
 test("Claude bidi leaf selectors omit conversation wrappers", () => {
-  assert.deepEqual([...BIDI_LEAF_SELECTORS], []);
+  assert.deepEqual([...BIDI_LEAF_SELECTORS], [CLAUDE_DESIGN_USER_MESSAGE_ROOT]);
   assert.equal(isBidiWrapperSelector(ASSISTANT_PROSE_ROOT), true);
   assert.equal(isBidiWrapperSelector(USER_MESSAGE_ROOT), true);
   assert.equal(isBidiWrapperSelector(CLAUDE_SKILL_FILE_VIEWER), true);
+  assert.equal(isBidiWrapperSelector(CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT), true);
+  assert.equal(isBidiWrapperSelector(CLAUDE_DESIGN_USER_MESSAGE_ROOT), false);
 
-  for (const selector of CONVERSATION_READING_SELECTORS) {
+  for (const selector of [
+    ASSISTANT_PROSE_ROOT,
+    USER_MESSAGE_ROOT,
+    CLAUDE_SKILL_FILE_VIEWER,
+    CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
+  ]) {
     assert.equal(
-      BIDI_LEAF_SELECTORS.includes(selector),
+      (BIDI_LEAF_SELECTORS as readonly string[]).includes(selector),
       false,
       `wrapper must not be a leaf: ${selector}`,
     );
@@ -586,6 +645,8 @@ test("Claude icon preservation stays on svg nodes and Ask User shells", () => {
   assert.ok(icons.includes(`${ASSISTANT_PROSE_ROOT} svg`));
   assert.ok(icons.includes(`${USER_MESSAGE_ROOT} svg`));
   assert.ok(icons.includes(`${CLAUDE_SKILL_FILE_VIEWER} svg`));
+  assert.ok(icons.includes(`${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} svg`));
+  assert.ok(icons.includes(`${CLAUDE_DESIGN_USER_MESSAGE_ROOT} svg`));
   assert.ok(icons.includes(`${CLAUDE_COMPOSER_EDITOR} svg`));
   assert.ok(icons.includes('[data-testid="ask-user-answers-card"]'));
   assert.ok(icons.includes("[data-ask-user-input-banner]"));

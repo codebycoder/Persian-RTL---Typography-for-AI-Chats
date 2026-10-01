@@ -34,6 +34,9 @@ import {
   ASSISTANT_TURN_STATUS_CONTAINER,
   ASSISTANT_TURN_STATUS_ROOT,
   CLAUDE_COMPOSER_EDITOR,
+  CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
+  CLAUDE_DESIGN_CHAT_ROOT,
+  CLAUDE_DESIGN_USER_MESSAGE_ROOT,
   USER_MESSAGE_ROOT,
 } from "./selectors";
 
@@ -91,6 +94,8 @@ test("Claude adapter works with the generic font engine", () => {
   assert.ok(css.includes(ASSISTANT_PROSE_ROOT));
   assert.ok(css.includes(USER_MESSAGE_ROOT));
   assert.ok(css.includes('[data-skill-file-viewer="true"]'));
+  assert.ok(css.includes(CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT));
+  assert.ok(css.includes(CLAUDE_DESIGN_USER_MESSAGE_ROOT));
   assertNoEmptySelectorRule(css);
   assertNoMalformedSelectorList(css);
 });
@@ -112,6 +117,32 @@ test("Claude font CSS restyles Markdown descendants inside conversation roots", 
 
   assert.ok(css.includes(`${ASSISTANT_PROSE_ROOT}:not(`));
   assert.ok(css.includes(`${USER_MESSAGE_ROOT}:not(`));
+  assert.ok(css.includes(`${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT}:not(`));
+});
+
+test("Claude Design font CSS stays on verified message text and preserves code", () => {
+  const css = fontCss();
+  const designSelectors = selectorListsContaining(css, 'data-testid="chat-messages"');
+
+  assert.ok(
+    designSelectors.some((selector) =>
+      selector.startsWith(`${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT}:not(`),
+    ),
+  );
+  assert.ok(
+    designSelectors.some((selector) =>
+      selector.startsWith(`${CLAUDE_DESIGN_USER_MESSAGE_ROOT}:not(`),
+    ),
+  );
+  assert.ok(css.includes(`${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre`));
+  assert.ok(
+    css.includes(
+      `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
+    ),
+  );
+  assert.equal(designSelectors.includes(CLAUDE_DESIGN_CHAT_ROOT), false);
+  assert.doesNotMatch(css, /data-chat-id="[^"]+"/);
+  assert.doesNotMatch(css, /data-msgfb|data-survey-card|ai-Lightning|ai-Caret/);
 });
 
 test("Claude font CSS does not target the entire assistant transcript row", () => {
@@ -164,7 +195,7 @@ test("Claude composer font uses the generic font engine and stays off composer c
 test("Claude sidebar CSS targets conversation titles and nested spans, not the whole sidebar", () => {
   const css = fontCss();
   const selectors = buildUiSurfaceSelectorList(claudeAdapter);
-  const sidebarSelectors = selectorListsContaining(css, 'data-testid="sidebar"');
+  const sidebarSelectors = selectorListsContaining(css, "data-row-label");
 
   assert.match(selectors, /\[data-testid="sidebar"\] \[data-row-key\^="chat:"\] \[data-row-label\]/);
   assert.match(
@@ -183,11 +214,22 @@ test("Claude sidebar CSS targets conversation titles and nested spans, not the w
   assert.ok(sidebarSelectors.length > 0, "expected sidebar title selectors");
   for (const selector of sidebarSelectors) {
     assert.ok(
-      selector.includes('[data-row-key^="chat:"]') && selector.includes("[data-row-label]"),
+      /\[data-(?:select-)?row-key\^="chat:"\]/.test(selector) &&
+        selector.includes("[data-row-label]"),
       `must not restyle the entire sidebar: ${selector}`,
     );
     assert.notEqual(selector.trim(), '[data-testid="sidebar"]');
   }
+
+  const projectTitle =
+    '[data-select-domain^="accordion:project:"] [data-select-row-key^="chat:"] [data-row-label]';
+  assert.ok(sidebarSelectors.includes(projectTitle));
+  assert.ok(sidebarSelectors.includes(`${projectTitle} :is(span)`));
+  assert.ok(
+    sidebarSelectors.includes(
+      '[data-testid="sidebar"] [data-select-row-key^="chat:"] [data-row-label]',
+    ),
+  );
 
   assert.doesNotMatch(css, /\[data-testid="sidebar"\]\s*\{/);
   assert.doesNotMatch(css, /data-row-action/);
@@ -434,6 +476,8 @@ test("applyFontSettingsToPage injects Claude conversation CSS through the generi
   assert.match(mounted[0]?.textContent ?? "", /data-morph-key/);
   assert.match(mounted[0]?.textContent ?? "", /data-timeline-text/);
   assert.match(mounted[0]?.textContent ?? "", /data-testid="chat-input"/);
+  assert.match(mounted[0]?.textContent ?? "", /data-testid="chat-messages"/);
+  assert.match(mounted[0]?.textContent ?? "", /\.om-md-content/);
   assert.doesNotMatch(mounted[0]?.textContent ?? "", /data-message-author-role/);
   assert.doesNotMatch(mounted[0]?.textContent ?? "", /chat-input-send|chat-input-attach/);
 });
@@ -447,6 +491,8 @@ test("Claude adapter works with the generic BiDi engine", () => {
     /\[data-testid="transcript-row"\]\[data-perf-row="assistant"\] \[data-cds="Prose"\][^\n]*:is\(/,
   );
   assert.match(selectors, /\[data-testid="user-message"\][^\n]*:is\(/);
+  assert.ok(selectors.includes(CLAUDE_DESIGN_USER_MESSAGE_ROOT));
+  assert.match(selectors, /\.om-assistant-group \.om-md-content[^\n]*:is\(/);
   assert.match(css, /unicode-bidi:\s*plaintext/);
   assert.match(css, /text-align:\s*start/);
   assertNoEmptySelectorRule(css);
@@ -471,6 +517,9 @@ test("Claude resolved-direction CSS is scoped, removable, and not a bidi-overrid
   assert.match(css, /direction:\s*auto !important/);
   assert.match(css, /unicode-bidi:\s*plaintext !important/);
   assert.match(css, /\[data-testid="transcript-row"\]\[data-perf-row="assistant"\] \[data-cds="Prose"\] \[data-rasttext-dir="rtl"\]/);
+  assert.ok(
+    css.includes(`${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} [data-rasttext-dir="rtl"]`),
+  );
   assert.match(
     css,
     /\[data-testid="chat-input"\]\[contenteditable="true"\]\[role="textbox"\] \[data-rasttext-dir="rtl"\]/,
@@ -509,7 +558,8 @@ test("Claude BiDi targets prose blocks and does not isolate inlines or wrappers"
   const isLists = [...selectors.matchAll(/:is\(([^)]+)\)/g)].map((match) => match[1] ?? "");
   const leafSelectors = selectors.split(",\n").filter((selector) => !selector.includes(" :is("));
 
-  assert.equal(leafSelectors.length, 0, "conversation wrappers must not be BiDi leaves");
+  assert.equal(leafSelectors.length, 1, "only the verified Design user span is a BiDi leaf");
+  assert.ok(leafSelectors[0]?.startsWith(CLAUDE_DESIGN_USER_MESSAGE_ROOT));
 
   for (const element of ["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "th", "td"]) {
     assert.match(blockList, new RegExp(`(?:^|, )${element}(?:,|$)`));

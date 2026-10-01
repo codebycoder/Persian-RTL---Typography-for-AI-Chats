@@ -6,6 +6,8 @@ import {
   ASSISTANT_ROW_ROOT,
   ASSISTANT_TURN_STATUS_PLAINTEXT_BIDI_SELECTORS,
   CLAUDE_COMPOSER_EDITOR,
+  CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
+  CLAUDE_DESIGN_USER_MESSAGE_ROOT,
   CLAUDE_SKILL_FILE_VIEWER,
   FENCED_CODE_BIDI_SELECTORS,
   USER_MESSAGE_ROOT,
@@ -25,13 +27,16 @@ import {
  *   (`[data-testid="transcript-row"][data-perf-row="assistant"] [data-cds="Prose"]`)
  * - logical text blocks inside the Skills / Outputs file viewer
  *   (`[data-skill-file-viewer="true"]`)
+ * - logical assistant Markdown blocks inside Design / Design System chat
+ *   (`[data-testid="chat-messages"][data-chat-id] ... .om-md-content`)
  * - logical editable blocks inside the normal composer
  *   (`[data-testid="chat-input"][contenteditable="true"][role="textbox"]`)
  *
  * Fenced `pre` blocks, AskUserQuestion span text units, and the assistant
  * TurnStatus morphing label use CSS `unicode-bidi: plaintext` so mixed
- * Persian/English content can resolve direction locally. Inline `code`
- * inside paragraphs is not scanned.
+ * Persian/English content can resolve direction locally. The pre-wrapped
+ * Design user-message span uses the same CSS-only path. Inline `code` inside
+ * paragraphs is not scanned.
  * Sidebar, toolbars, and composer chrome are never scanned. Composer typing uses
  * `input` / `focusin` events (see `lifecycle.ts`); the assistant
  * MutationObserver is not reused for the composer.
@@ -107,7 +112,7 @@ const LATIN_LETTER = /\p{Script=Latin}/u;
 const LETTER = /\p{L}/u;
 
 const pendingBlocks = new Set<Element>();
-/** Observers on assistant Prose roots and skill file-viewer roots. */
+/** Observers on normal/Design assistant prose and skill file-viewer roots. */
 const readingRootObservers = new Map<Element, MutationObserver>();
 
 let active = false;
@@ -296,8 +301,45 @@ export function isSkillFileViewerRoot(element: Element): boolean {
   return element.getAttribute("data-skill-file-viewer") === "true";
 }
 
+function hasClassToken(element: Element, token: string): boolean {
+  return (element.getAttribute("class") ?? "").split(/\s+/u).includes(token);
+}
+
+/**
+ * Design uses semantic `om-*` class tokens for assistant Markdown but no
+ * `data-cds="Prose"`. Require both tokens plus the attributed chat root so
+ * similarly named nodes elsewhere on claude.ai are never scanned.
+ */
+export function isDesignAssistantProseRoot(element: Element): boolean {
+  if (!hasClassToken(element, "om-md-content")) {
+    return false;
+  }
+
+  let current = element.parentElement;
+  let insideAssistantGroup = false;
+  while (current) {
+    if (hasClassToken(current, "om-assistant-group")) {
+      insideAssistantGroup = true;
+    }
+
+    if (
+      current.getAttribute("data-testid") === "chat-messages" &&
+      current.hasAttribute("data-chat-id")
+    ) {
+      return insideAssistantGroup;
+    }
+    current = current.parentElement;
+  }
+
+  return false;
+}
+
 export function isDirectionReadingRoot(element: Element): boolean {
-  return isAssistantProseRoot(element) || isSkillFileViewerRoot(element);
+  return (
+    isAssistantProseRoot(element) ||
+    isSkillFileViewerRoot(element) ||
+    isDesignAssistantProseRoot(element)
+  );
 }
 
 export function isSupportedAssistantBlock(element: Element): boolean {
@@ -421,34 +463,40 @@ export function buildClaudeDirectionCss(): string {
   const plaintextBidi = [
     ...FENCED_CODE_BIDI_SELECTORS,
     ...ASK_USER_PLAINTEXT_BIDI_SELECTORS,
+    CLAUDE_DESIGN_USER_MESSAGE_ROOT,
     ...ASSISTANT_TURN_STATUS_PLAINTEXT_BIDI_SELECTORS,
   ].join(",\n");
   const rtl = [
     `${ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
     `${CLAUDE_SKILL_FILE_VIEWER} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
+    `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
     `${CLAUDE_COMPOSER_EDITOR} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
     `${CLAUDE_COMPOSER_EDITOR}[${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
   ].join(",\n");
   const ltr = [
     `${ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
     `${CLAUDE_SKILL_FILE_VIEWER} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
+    `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
     `${CLAUDE_COMPOSER_EDITOR} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
     `${CLAUDE_COMPOSER_EDITOR}[${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
   ].join(",\n");
   const ltrListText = [
     `${ASSISTANT_PROSE_ROOT} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
     `${CLAUDE_SKILL_FILE_VIEWER} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
+    `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
     `${CLAUDE_COMPOSER_EDITOR} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
   ].join(",\n");
   const listSpacing = [
     `${ASSISTANT_PROSE_ROOT} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
     `${CLAUDE_SKILL_FILE_VIEWER} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
+    `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
     `${CLAUDE_COMPOSER_EDITOR} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
   ].join(",\n");
   const inlineCode = [
     `${ASSISTANT_ROW_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
     `${USER_MESSAGE_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
     `${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt):not(pre *)`,
+    `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
     `${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt):not(pre *)`,
   ].join(",\n");
 
@@ -631,8 +679,17 @@ function isInsideSkillFileViewer(element: Element): boolean {
   return element.closest(CLAUDE_SKILL_FILE_VIEWER) !== null;
 }
 
+function isInsideDesignAssistantProse(element: Element): boolean {
+  const prose = element.closest(CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT);
+  return prose !== null && isDesignAssistantProseRoot(prose);
+}
+
 function isInsideDirectionReadingRoot(element: Element): boolean {
-  return isInsideAssistantProse(element) || isInsideSkillFileViewer(element);
+  return (
+    isInsideAssistantProse(element) ||
+    isInsideSkillFileViewer(element) ||
+    isInsideDesignAssistantProse(element)
+  );
 }
 
 function scanExistingReadingRoots(doc: Document): void {
@@ -648,6 +705,14 @@ function scanExistingReadingRoots(doc: Document): void {
   for (let index = 0; index < viewerNodes.length; index += 1) {
     const root = viewerNodes[index];
     if (root) {
+      attachReadingRootObserver(root);
+    }
+  }
+
+  const designProseNodes = doc.querySelectorAll(CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT);
+  for (let index = 0; index < designProseNodes.length; index += 1) {
+    const root = designProseNodes[index];
+    if (root && isDesignAssistantProseRoot(root)) {
       attachReadingRootObserver(root);
     }
   }
@@ -869,10 +934,15 @@ function collectDirectionReadingRoots(node: Node): Element[] {
     found.push(element);
   }
 
-  const nestedProse = element.querySelectorAll(PROSE_SELECTOR);
+  const nestedProse = element.querySelectorAll(
+    `${PROSE_SELECTOR}, ${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT}`,
+  );
   for (let index = 0; index < nestedProse.length; index += 1) {
     const candidate = nestedProse[index];
-    if (candidate && isAssistantProseRoot(candidate)) {
+    if (
+      candidate &&
+      (isAssistantProseRoot(candidate) || isDesignAssistantProseRoot(candidate))
+    ) {
       found.push(candidate);
     }
   }

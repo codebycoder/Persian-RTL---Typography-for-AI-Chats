@@ -17,6 +17,7 @@ import {
   detectBlockDirection,
   flushClaudeDirectionUpdates,
   getDetectableText,
+  isDesignAssistantProseRoot,
   mountClaudeDirection,
   processComposerEditor,
   removeRastTextDirAttributes,
@@ -24,6 +25,7 @@ import {
   unmountClaudeDirection,
 } from "./direction";
 import { mountClaudePlatformSupport, unmountClaudePlatformSupport } from "./lifecycle";
+import { CLAUDE_DESIGN_USER_MESSAGE_ROOT } from "./selectors";
 
 type FakeNode = FakeElement | FakeText;
 
@@ -276,9 +278,23 @@ function matchesSimple(element: FakeElement, selector: string): boolean {
     match = attrPattern.exec(selector);
   }
 
-  const tag = selector.replace(/\[.*?\]/g, "").trim().toLowerCase();
+  const classTokens = [...selector.matchAll(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g)].map(
+    (classMatch) => classMatch[1] ?? "",
+  );
+  const tag = selector
+    .replace(/\[.*?\]/g, "")
+    .replace(/\.[a-zA-Z_-][a-zA-Z0-9_-]*/g, "")
+    .trim()
+    .toLowerCase();
   if (tag && element.tagName.toLowerCase() !== tag) {
     return false;
+  }
+
+  const elementClasses = (element.getAttribute("class") ?? "").split(/\s+/u);
+  for (const classToken of classTokens) {
+    if (!elementClasses.includes(classToken)) {
+      return false;
+    }
   }
 
   for (const attribute of attributes) {
@@ -410,6 +426,28 @@ function createSkillFileViewerBlock(
   viewer.appendChild(block);
   doc.body.appendChild(viewer);
   return { doc, block, viewer };
+}
+
+function createDesignAssistantBlock(
+  text: string,
+  options: { dir?: string; tag?: string; doc?: FakeDocument } = {},
+): { doc: FakeDocument; block: FakeElement; prose: FakeElement; chat: FakeElement } {
+  const doc = options.doc ?? new FakeDocument();
+  const chat = el(doc, "div", {
+    "data-testid": "chat-messages",
+    "data-chat-id": "design-chat",
+  });
+  const item = el(doc, "div", { "data-index": "0" });
+  const group = el(doc, "div", { class: "om-assistant-group" });
+  const prose = el(doc, "div", { class: "om-md-content" });
+  const block = el(doc, options.tag ?? "p", options.dir ? { dir: options.dir } : {});
+  block.textContent = text;
+  prose.appendChild(block);
+  group.appendChild(prose);
+  item.appendChild(group);
+  chat.appendChild(item);
+  doc.body.appendChild(chat);
+  return { doc, block, prose, chat };
 }
 
 function characterDataMutation(target: FakeText): MutationRecord {
@@ -804,6 +842,9 @@ test("Claude direction CSS scopes resolved blocks and avoids override/global imp
   assert.match(css, /data-cds="Prose"/);
   assert.match(css, /data-perf-row="assistant"/);
   assert.match(css, /data-skill-file-viewer="true"/);
+  assert.match(css, /data-testid="chat-messages"/);
+  assert.match(css, /\.om-assistant-group \.om-md-content/);
+  assert.ok(css.includes(`${CLAUDE_DESIGN_USER_MESSAGE_ROOT},`));
   assert.match(css, /data-testid="chat-input"/);
   assert.match(css, /\[data-rasttext-dir="rtl"\][\s\S]*\{\n {2}direction:\s*rtl;/);
   assert.match(css, /\[data-rasttext-dir="ltr"\][\s\S]*\{\n {2}direction:\s*ltr;/);
@@ -859,6 +900,58 @@ test("newly opened skill file viewer roots are discovered", () => {
   assert.ok(discovery);
   doc.body.appendChild(viewer);
   discovery.callback([childListMutation(doc.body, [viewer])], discovery as unknown as MutationObserver);
+
+  assert.equal(paragraph.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(paragraph.getAttribute("dir"), "ltr");
+});
+
+test("Design assistant Markdown resolves Persian direction without rewriting host dir", () => {
+  const text = "EnvelopeOpening را به دیزاین سیستم اضافه کردم";
+  const { doc, block, prose } = createDesignAssistantBlock(text, { dir: "ltr" });
+
+  assert.equal(isDesignAssistantProseRoot(asElement(prose)), true);
+  mountClaudeDirection(asDocument(doc));
+
+  assert.equal(detectBlockDirection(text), "rtl");
+  assert.equal(block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(block.getAttribute("dir"), "ltr");
+});
+
+test("Design direction discovery ignores om-md-content outside attributed chat roots", () => {
+  const doc = new FakeDocument();
+  const group = el(doc, "div", { class: "om-assistant-group" });
+  const prose = el(doc, "div", { class: "om-md-content" });
+  const paragraph = el(doc, "p", { dir: "ltr" });
+  paragraph.textContent = "این متن بیرون از چت دیزاین است";
+  prose.appendChild(paragraph);
+  group.appendChild(prose);
+  doc.body.appendChild(group);
+
+  assert.equal(isDesignAssistantProseRoot(asElement(prose)), false);
+  mountClaudeDirection(asDocument(doc));
+  assert.equal(paragraph.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+});
+
+test("newly added Design assistant Markdown roots are discovered", () => {
+  const { doc } = createAssistantBlock("Normal Claude response");
+  mountClaudeDirection(asDocument(doc));
+
+  const chat = el(doc, "div", {
+    "data-testid": "chat-messages",
+    "data-chat-id": "new-design-chat",
+  });
+  const group = el(doc, "div", { class: "om-assistant-group" });
+  const prose = el(doc, "div", { class: "om-md-content" });
+  const paragraph = el(doc, "p", { dir: "ltr" });
+  paragraph.textContent = "Design System برای این پروژه آماده شده است";
+  prose.appendChild(paragraph);
+  group.appendChild(prose);
+  chat.appendChild(group);
+
+  const discovery = activeDiscoveryObservers()[0];
+  assert.ok(discovery);
+  doc.body.appendChild(chat);
+  discovery.callback([childListMutation(doc.body, [chat])], discovery as unknown as MutationObserver);
 
   assert.equal(paragraph.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
   assert.equal(paragraph.getAttribute("dir"), "ltr");

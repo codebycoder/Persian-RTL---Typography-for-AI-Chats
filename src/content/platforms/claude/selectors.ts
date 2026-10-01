@@ -24,6 +24,15 @@
  *   `data-prose-review-dockey`, `font-claude-response`, `standard-markdown`,
  *   or hashed `_blocks_*` classes as selectors.
  *
+ * Design / Design System chat (verified 2026-10 from authenticated DOM):
+ *   [data-testid="chat-messages"][data-chat-id]
+ *   Assistant Markdown is scoped by the semantic `om-assistant-group` and
+ *   `om-md-content` class tokens. User message copy is the pre-wrapped span
+ *   inside a virtualized `[data-index]` item. These selectors deliberately
+ *   stay off activity cards, survey chrome, feedback buttons, and `ai-*`
+ *   icon-font nodes. `data-chat-id` is matched by presence only; never pin a
+ *   conversation UUID.
+ *
  * Claude already sets dir="rtl" or dir="ltr" on many generated blocks
  * (p, h3, ul, …). RastText must not replace those attributes. The generic
  * BiDi engine still applies unicode-bidi: plaintext and text-align: start
@@ -52,8 +61,11 @@
  * is deferred: the generic BiDi engine only isolates conversation blocks
  * and bidiLeaf selectors, and extending that contract is out of scope.
  *
- * Sidebar conversation titles (verified 2026-09):
+ * Sidebar conversation titles (verified 2026-09 / 2026-10):
  *   [data-testid="sidebar"] [data-row-key^="chat:"] [data-row-label]
+ *   New rows use `data-select-row-key="chat:<uuid>"`. Project chat lists
+ *   expose `data-select-domain="accordion:project:<uuid>"`, which also
+ *   scopes their titles when no sidebar test ID is present.
  *   The visible title is nested in spans under [data-row-label]. The
  *   More Options control is a sibling [data-row-action] and must not be
  *   targeted. Do not style the whole sidebar, the whole chat row, or
@@ -95,10 +107,28 @@ export const ASSISTANT_PROSE_ROOT = `${ASSISTANT_ROW_ROOT} [data-cds="Prose"]`;
  */
 export const CLAUDE_SKILL_FILE_VIEWER = '[data-skill-file-viewer="true"]';
 
+/** Claude's Design / Design System chat panel. */
+export const CLAUDE_DESIGN_CHAT_ROOT =
+  '[data-testid="chat-messages"][data-chat-id]';
+
+/** Semantic assistant Markdown root inside the Design chat panel. */
+export const CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT =
+  `${CLAUDE_DESIGN_CHAT_ROOT} .om-assistant-group .om-md-content`;
+
+/**
+ * User-authored copy in a virtualized Design chat item. The inline
+ * white-space declaration is the narrowest verified marker in the supplied
+ * authenticated DOM; the surrounding bubble has utility classes only.
+ */
+export const CLAUDE_DESIGN_USER_MESSAGE_ROOT =
+  `${CLAUDE_DESIGN_CHAT_ROOT} [data-index] span[style*="white-space: pre-wrap"]`;
+
 export const CONVERSATION_READING_SELECTORS = [
   ASSISTANT_PROSE_ROOT,
   USER_MESSAGE_ROOT,
   CLAUDE_SKILL_FILE_VIEWER,
+  CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
+  CLAUDE_DESIGN_USER_MESSAGE_ROOT,
 ] as const;
 
 /**
@@ -111,7 +141,8 @@ export function isBidiWrapperSelector(selector: string): boolean {
     selector.includes('[data-cds="Prose"]') ||
     selector.includes(USER_MESSAGE_ROOT) ||
     selector.includes('data-skill-file-viewer="true"') ||
-    selector.includes(CLAUDE_SKILL_FILE_VIEWER)
+    selector.includes(CLAUDE_SKILL_FILE_VIEWER) ||
+    selector.includes(".om-md-content")
   );
 }
 
@@ -133,6 +164,8 @@ export const FENCED_CODE_BIDI_SELECTORS = [
   `${USER_MESSAGE_ROOT} pre code`,
   `${CLAUDE_SKILL_FILE_VIEWER} pre`,
   `${CLAUDE_SKILL_FILE_VIEWER} pre code`,
+  `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre`,
+  `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre code`,
   `${CLAUDE_COMPOSER_EDITOR} pre`,
   `${CLAUDE_COMPOSER_EDITOR} pre code`,
 ] as const;
@@ -144,6 +177,8 @@ export const CODE_FONT_SELECTORS = [
   `${USER_MESSAGE_ROOT} pre *`,
   `${CLAUDE_SKILL_FILE_VIEWER} pre`,
   `${CLAUDE_SKILL_FILE_VIEWER} pre *`,
+  `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre`,
+  `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre *`,
   `${CLAUDE_COMPOSER_EDITOR} pre`,
   `${CLAUDE_COMPOSER_EDITOR} pre *`,
 ] as const;
@@ -155,6 +190,8 @@ export const CODE_PRESERVE_SELECTORS = [
   `${USER_MESSAGE_ROOT} :is(code, kbd, samp, tt):not(pre *) *`,
   `${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt):not(pre *)`,
   `${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt):not(pre *) *`,
+  `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
+  `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(code, kbd, samp, tt):not(pre *) *`,
   `${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt):not(pre *)`,
   `${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt):not(pre *) *`,
 ] as const;
@@ -231,10 +268,11 @@ export const ASK_USER_TEXT_SPAN_SELECTOR = [
 
 /**
  * Sidebar conversation titles. Verified against authenticated Claude
- * markup (2026-09): chat rows expose `data-row-key="chat:<uuid>"` and the
- * visible title is `[data-row-label]`, with overflow implemented as
- * nested spans. Scoped under `[data-testid="sidebar"]` so other
- * `data-row-key` / `data-row-label` uses outside the sidebar are ignored.
+ * markup (2026-09 / 2026-10): chat rows expose `data-row-key="chat:<uuid>"`
+ * or `data-select-row-key="chat:<uuid>"`. The visible title is
+ * `[data-row-label]`, with overflow implemented as nested spans. Scope
+ * to the sidebar or a project accordion's semantic selection domain;
+ * neither rule depends on a specific project or conversation UUID.
  *
  * Do not target generated classes such as `_r_4o_`, `dframe-*` / `df-*`
  * utilities, Tailwind classes, the row `<a>`, `[data-row-action]`,
@@ -242,6 +280,8 @@ export const ASK_USER_TEXT_SPAN_SELECTOR = [
  */
 export const SIDEBAR_CHAT_TITLE_SELECTORS = [
   '[data-testid="sidebar"] [data-row-key^="chat:"] [data-row-label]',
+  '[data-testid="sidebar"] [data-select-row-key^="chat:"] [data-row-label]',
+  '[data-select-domain^="accordion:project:"] [data-select-row-key^="chat:"] [data-row-label]',
 ] as const;
 
 export const SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS = ["span"] as const;
@@ -376,6 +416,10 @@ export const ICON_PRESERVE_SELECTORS = [
   `${USER_MESSAGE_ROOT} svg *`,
   `${CLAUDE_SKILL_FILE_VIEWER} svg`,
   `${CLAUDE_SKILL_FILE_VIEWER} svg *`,
+  `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} svg`,
+  `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} svg *`,
+  `${CLAUDE_DESIGN_USER_MESSAGE_ROOT} svg`,
+  `${CLAUDE_DESIGN_USER_MESSAGE_ROOT} svg *`,
   `${CLAUDE_COMPOSER_EDITOR} svg`,
   `${CLAUDE_COMPOSER_EDITOR} svg *`,
   ...ASK_USER_ICON_PRESERVE_SELECTORS,
