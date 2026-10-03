@@ -399,11 +399,11 @@ function createAssistantBlock(
 
 function createComposerBlock(
   text: string,
-  options: { dir?: string; tag?: string; doc?: FakeDocument; editorDir?: string } = {},
+  options: { dir?: string; tag?: string; doc?: FakeDocument; editorDir?: string; editorTestId?: string } = {},
 ): { doc: FakeDocument; editor: FakeElement; block: FakeElement } {
   const doc = options.doc ?? new FakeDocument();
   const editor = el(doc, "div", {
-    "data-testid": "chat-input",
+    "data-testid": options.editorTestId ?? "chat-input",
     contenteditable: "true",
     role: "textbox",
     dir: options.editorDir ?? "rtl",
@@ -639,6 +639,55 @@ test("headings and list items are resolved", () => {
   });
   mountClaudeDirection(asDocument(item.doc));
   assert.equal(item.block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
+});
+
+test("table headers control column direction while cells keep local text direction", () => {
+  const { doc, block: table } = createAssistantBlock("", { tag: "table", dir: "auto" });
+  const head = el(doc, "thead");
+  const headerRow = el(doc, "tr");
+  const header = el(doc, "th", { dir: "auto" });
+  header.textContent = "تحلیل";
+  headerRow.appendChild(header);
+  head.appendChild(headerRow);
+  table.appendChild(head);
+  const body = el(doc, "tbody");
+  const row = el(doc, "tr");
+  const english = el(doc, "td", { dir: "auto" });
+  english.textContent = "Moving Average / Candlestick Patterns / Support / Resistance";
+  const neutral = el(doc, "td", { dir: "auto" });
+  neutral.textContent = "✅";
+  row.appendChild(english);
+  row.appendChild(neutral);
+  body.appendChild(row);
+  table.appendChild(body);
+
+  mountClaudeDirection(asDocument(doc));
+  assert.equal(table.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(english.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
+  assert.equal(neutral.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+  assert.equal(table.getAttribute("dir"), "auto");
+
+  header.textContent = "Analysis";
+  resolveAssistantBlock(asElement(header));
+  assert.equal(table.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
+  // Without headers, resolve from the first row, including mixed-script cells.
+  head.remove();
+  neutral.textContent = "✅ بسیار مهم";
+  resolveAssistantBlock(asElement(table));
+  assert.equal(table.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  neutral.textContent = "✅";
+  const laterRow = el(doc, "tr");
+  const laterPersian = el(doc, "td");
+  laterPersian.textContent = "این داده فارسی نباید ترتیب ستون‌های انگلیسی را تغییر دهد";
+  laterRow.appendChild(laterPersian);
+  body.appendChild(laterRow);
+  resolveAssistantBlock(asElement(table));
+  assert.equal(table.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
+
+  unmountClaudeDirection(asDocument(doc));
+  assert.equal(table.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+  assert.equal(english.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+  assert.equal(table.getAttribute("dir"), "auto");
 });
 
 test("assistant technical Persian lists keep markers on the RTL edge", () => {
@@ -917,6 +966,72 @@ test("Design assistant Markdown resolves Persian direction without rewriting hos
   assert.equal(block.getAttribute("dir"), "ltr");
 });
 
+test("question receipts resolve English-labelled Persian answers per line and clean up", () => {
+  const doc = new FakeDocument();
+  const receipt = el(doc, "div", { "data-testid": "question-receipt" });
+  const header = el(doc, "div");
+  header.textContent = "You answered";
+  receipt.appendChild(header);
+  const line = el(doc, "div", { "data-testid": "question-receipt-line", dir: "ltr" });
+  const label = el(doc, "span");
+  label.textContent = "location: ";
+  line.appendChild(label);
+  line.appendChild(new FakeText("صفحه‌ی جدید Catering در سایدبار (تب Meals)"));
+  receipt.appendChild(line);
+  const english = el(doc, "div", { "data-testid": "question-receipt-line" });
+  english.textContent = "devices: Desktop and mobile";
+  receipt.appendChild(english);
+  doc.body.appendChild(receipt);
+  const outside = el(doc, "div", { "data-testid": "question-receipt-line" });
+  outside.textContent = "متن فارسی بیرون از کارت";
+  doc.body.appendChild(outside);
+
+  mountClaudeDirection(asDocument(doc));
+  assert.equal(line.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(line.getAttribute("dir"), "ltr");
+  assert.equal(english.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
+  for (const element of [receipt, header, label, outside]) {
+    assert.equal(element.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+  }
+
+  const css = buildClaudeDirectionCss();
+  assert.ok(css.includes('[data-testid="question-receipt"] [data-testid="question-receipt-line"][data-rasttext-dir="rtl"]'));
+  assert.ok(css.includes('[data-testid="question-receipt"] [data-testid="question-receipt-line"] > span'));
+  unmountClaudeDirection(asDocument(doc));
+  assert.equal(line.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+  assert.equal(english.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+  assert.equal(line.getAttribute("dir"), "ltr");
+});
+
+test("new question receipts and changed answer lines are observed", () => {
+  const doc = new FakeDocument();
+  mountClaudeDirection(asDocument(doc));
+  const receipt = el(doc, "div", { "data-testid": "question-receipt" });
+  const line = el(doc, "div", { "data-testid": "question-receipt-line" });
+  line.textContent = "editor: دیالوگ وسط صفحه";
+  receipt.appendChild(line);
+  doc.body.appendChild(receipt);
+  const discovery = activeDiscoveryObservers()[0];
+  assert.ok(discovery);
+  discovery.callback([childListMutation(doc.body, [receipt])], discovery as unknown as MutationObserver);
+  assert.equal(line.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+
+  const observer = activeProseObservers().find((item) => item.target === (receipt as unknown as Node));
+  assert.ok(observer);
+  const text = line.childNodes[0] as FakeText;
+  text.nodeValue = "editor: Centered dialog";
+  observer.callback([characterDataMutation(text)], observer as unknown as MutationObserver);
+  flushClaudeDirectionUpdates();
+  assert.equal(line.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
+
+  const newLine = el(doc, "div", { "data-testid": "question-receipt-line" });
+  newLine.textContent = "devices: دسکتاپ + موبایل";
+  receipt.appendChild(newLine);
+  observer.callback([childListMutation(receipt, [newLine])], observer as unknown as MutationObserver);
+  flushClaudeDirectionUpdates();
+  assert.equal(newLine.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+});
+
 test("Design direction discovery ignores om-md-content outside attributed chat roots", () => {
   const doc = new FakeDocument();
   const group = el(doc, "div", { class: "om-assistant-group" });
@@ -989,6 +1104,57 @@ test("direction module stays local-only and does not persist or log message text
   assert.doesNotMatch(source, /\bfetch\s*\(/);
   assert.doesNotMatch(source, /console\.(log|info|debug|warn|error)\(/);
   assert.match(source, /never stored, logged, transmitted/);
+});
+
+test("Design composer resolves each paragraph and updates direction on input and focus", () => {
+  const { doc, editor, block } = createComposerBlock("React برای ساخت این صفحه استفاده می‌شود", {
+    editorTestId: "chat-composer-input",
+    editorDir: "ltr",
+  });
+  const english = el(doc, "p", { dir: "auto" });
+  english.textContent = "Build this page using React";
+  editor.appendChild(english);
+  const toolbar = el(doc, "button", { "data-testid": "composer-ds-picker-trigger" });
+  toolbar.textContent = "این متن فارسی نباید جهت بگیرد";
+  doc.body.appendChild(toolbar);
+
+  mountClaudePlatformSupport(asDocument(doc));
+  assert.equal(block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  assert.equal(english.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
+  assert.equal(editor.getAttribute("dir"), "ltr");
+  assert.equal(block.getAttribute("dir"), "auto");
+
+  block.textContent = "Now write an English prompt";
+  doc.dispatchDelegated("input", editor);
+  assert.equal(block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "ltr");
+  block.textContent = "این یک پیام فارسی است";
+  doc.dispatchDelegated("focusin", block);
+  assert.equal(block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+  doc.dispatchDelegated("input", toolbar);
+  assert.equal(toolbar.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+
+  block.textContent = "";
+  doc.dispatchDelegated("input", editor);
+  assert.equal(block.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+  unmountClaudePlatformSupport(asDocument(doc));
+  assert.equal(english.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
+  assert.equal(doc.listenerCount("input"), 0);
+});
+
+test("Design composers added after mounting are handled by delegated input", () => {
+  const doc = new FakeDocument();
+  mountClaudePlatformSupport(asDocument(doc));
+  const { editor, block } = createComposerBlock("برای این پروژه از TypeScript استفاده کن", {
+    doc,
+    editorTestId: "chat-composer-input",
+  });
+  doc.dispatchDelegated("input", editor);
+  assert.equal(block.getAttribute(RASTTEXT_DIR_ATTRIBUTE), "rtl");
+
+  editor.setAttribute("contenteditable", "false");
+  block.removeAttribute(RASTTEXT_DIR_ATTRIBUTE);
+  doc.dispatchDelegated("input", editor);
+  assert.equal(block.hasAttribute(RASTTEXT_DIR_ATTRIBUTE), false);
 });
 
 test("composer Persian text resolves rtl through the shared detector", () => {

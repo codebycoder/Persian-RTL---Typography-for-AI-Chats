@@ -1,4 +1,5 @@
 import { RASTTEXT_DIR_ATTRIBUTE } from "@shared/constants";
+import { buildTableDirectionCss, detectTableDirection } from "../../table-direction";
 import {
   CANVAS_EDITOR_ROOT_SELECTOR,
   CANVAS_EDITOR_SELECTORS,
@@ -13,11 +14,11 @@ const ROOTS = STYLE_ROOTS.join(", ");
 /** @deprecated Kept only so disable/cleanup can strip older builds. */
 const LTR_LIST_TEXT = "data-rasttext-ltr-item";
 /**
- * Leaf text blocks. `ul`/`ol` are intentionally omitted — annotating a whole
- * list from mixed Persian/English content was forcing English source links
- * to RTL / right-aligned.
+ * Text blocks plus tables for column layout. `ul`/`ol` are intentionally
+ * omitted — annotating a whole list from mixed Persian/English content was
+ * forcing English source links to RTL / right-aligned.
  */
-const BLOCKS = "p, h1, h2, h3, h4, h5, h6, li, blockquote, th, td";
+const BLOCKS = "p, h1, h2, h3, h4, h5, h6, li, blockquote, table, th, td";
 const EXCLUDED = 'pre, code, kbd, samp, tt, svg, button, input, textarea, [role="textbox"], [contenteditable="true"], [contenteditable="plaintext-only"]';
 const EDITOR_INNER_EXCLUDED = 'pre, code, kbd, samp, tt, svg, button, input, textarea, [contenteditable="plaintext-only"]';
 const MANAGED_EDITOR_SELECTOR = [CHATGPT_COMPOSER_EDITOR, CANVAS_EDITOR_ROOT_SELECTOR]
@@ -70,7 +71,9 @@ export function resolveChatGptRoot(root: Element): void {
     if (isDirectionSkipped(block)) continue;
     // Decide from this block alone. Never promote a list-wide Persian signal
     // onto English-only items such as official source links.
-    const direction = detectChatGptDirection(readableText(block));
+    const direction = block.tagName === "TABLE"
+      ? detectTableDirection(block, readableText, detectChatGptDirection)
+      : detectChatGptDirection(readableText(block));
     block.removeAttribute(LTR_LIST_TEXT);
     // Persian/Arabic → RTL. Latin-only → explicit LTR so it does not inherit
     // a parent RTL base (file viewer / mixed lists). Neutral → leave alone.
@@ -111,6 +114,7 @@ export function buildChatGptDirectionCss(): string {
   direction: ltr !important;
   unicode-bidi: isolate !important;
 }`,
+    buildTableDirectionCss(STYLE_ROOTS),
   ].join("\n\n");
 }
 
