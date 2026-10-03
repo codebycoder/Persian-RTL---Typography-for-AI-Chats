@@ -4,7 +4,7 @@ import {
   processComposerEditor,
   unmountClaudeDirection,
 } from "./direction";
-import { CLAUDE_COMPOSER_EDITOR } from "./selectors";
+import { COMPOSER_SELECTORS } from "./selectors";
 
 /**
  * Claude platform lifecycle.
@@ -25,6 +25,7 @@ type ComposerListenerBinding = {
 };
 
 let composerListeners: ComposerListenerBinding | null = null;
+const COMPOSER_SELECTOR = COMPOSER_SELECTORS.join(", ");
 
 function isElementLike(value: EventTarget | null): value is Element {
   return (
@@ -37,13 +38,13 @@ function isElementLike(value: EventTarget | null): value is Element {
 
 function closestComposerEditor(target: EventTarget | null): Element | null {
   if (isElementLike(target)) {
-    return target.closest(CLAUDE_COMPOSER_EDITOR);
+    return target.closest(COMPOSER_SELECTOR);
   }
 
   if (target && typeof target === "object" && "parentElement" in target) {
     const parent = (target as { parentElement: EventTarget | null }).parentElement;
     if (isElementLike(parent)) {
-      return parent.closest(CLAUDE_COMPOSER_EDITOR);
+      return parent.closest(COMPOSER_SELECTOR);
     }
   }
 
@@ -51,7 +52,7 @@ function closestComposerEditor(target: EventTarget | null): Element | null {
 }
 
 function processAllComposers(doc: Document): void {
-  const editors = doc.querySelectorAll(CLAUDE_COMPOSER_EDITOR);
+  const editors = doc.querySelectorAll(COMPOSER_SELECTOR);
   for (let index = 0; index < editors.length; index += 1) {
     const editor = editors[index];
     if (editor) {
@@ -61,7 +62,7 @@ function processAllComposers(doc: Document): void {
 }
 
 function clearAllComposers(doc: Document): void {
-  const editors = doc.querySelectorAll(CLAUDE_COMPOSER_EDITOR);
+  const editors = doc.querySelectorAll(COMPOSER_SELECTOR);
   for (let index = 0; index < editors.length; index += 1) {
     const editor = editors[index];
     if (editor) {

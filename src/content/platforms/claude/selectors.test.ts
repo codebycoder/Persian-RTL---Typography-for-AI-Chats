@@ -20,6 +20,7 @@ import {
   BIDI_LEAF_SELECTORS,
   CANVAS_EDITOR_SELECTORS,
   CLAUDE_COMPOSER_EDITOR,
+  CLAUDE_DESIGN_COMPOSER_EDITOR,
   CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
   CLAUDE_DESIGN_CHAT_ROOT,
   CLAUDE_DESIGN_USER_MESSAGE_ROOT,
@@ -175,11 +176,19 @@ test("Claude composer selector uses the verified chat-input textbox", () => {
     CLAUDE_COMPOSER_EDITOR,
     '[data-testid="chat-input"][contenteditable="true"][role="textbox"]',
   );
-  assert.deepEqual([...COMPOSER_SELECTORS], [CLAUDE_COMPOSER_EDITOR]);
+  assert.deepEqual([...COMPOSER_SELECTORS], [CLAUDE_COMPOSER_EDITOR, CLAUDE_DESIGN_COMPOSER_EDITOR]);
   assert.ok(CLAUDE_COMPOSER_EDITOR.includes('[data-testid="chat-input"]'));
   assert.ok(CLAUDE_COMPOSER_EDITOR.includes('[contenteditable="true"]'));
   assert.ok(CLAUDE_COMPOSER_EDITOR.includes('[role="textbox"]'));
   assert.ok(COMPOSER_AND_CONTROL_EXCLUSIONS.includes(CLAUDE_COMPOSER_EDITOR));
+});
+
+test("Claude Design composer uses the verified editable textbox and excludes reading rules", () => {
+  assert.equal(
+    CLAUDE_DESIGN_COMPOSER_EDITOR,
+    '[data-testid="chat-composer-input"][contenteditable="true"][role="textbox"]',
+  );
+  assert.ok(COMPOSER_AND_CONTROL_EXCLUSIONS.includes(CLAUDE_DESIGN_COMPOSER_EDITOR));
 });
 
 test("Claude composer selector does not depend on ProseMirror, tiptap, or generated IDs", () => {
@@ -282,6 +291,8 @@ test("Claude Ask User Answers UiSurface exists and uses the verified answers-car
     CLAUDE_UI_SURFACES.map((surface) => surface.id),
     [
       "sidebar-chat-titles",
+      "chat-list-titles",
+      "question-receipt",
       "ask-user-answers-card",
       "ask-user-input-banner",
       "assistant-turn-status",
@@ -479,7 +490,7 @@ test("Claude thinking timeline UiSurface targets step paragraphs with the conver
   assert.equal(timeline.font, "conversation");
 
   for (const surface of CLAUDE_UI_SURFACES) {
-    if (surface.id === "assistant-timeline-text") {
+    if (surface.id === "assistant-timeline-text" || surface.id === "question-receipt") {
       continue;
     }
 

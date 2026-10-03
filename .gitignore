@@ -24,8 +24,6 @@ yarn-debug.log*
 yarn-error.log*
 
 # Environment and local overrides
-.env
-.env.*
 !.env.example
 *.local
 
@@ -33,7 +31,6 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 .idea/
-.vscode/
 *.swp
 *.swo
 
@@ -49,3 +46,4 @@ fonts/*
 !fonts/*-Variable.ttf
 !fonts/*-OFL.txt
 !fonts/LICENSES.md
+config.bat

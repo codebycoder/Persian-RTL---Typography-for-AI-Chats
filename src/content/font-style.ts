@@ -237,25 +237,39 @@ export function buildConversationFontCss(
   const icons = joinSelectors(platform.selectors.iconPreserve);
   const cdsIcons = joinSelectors(platform.selectors.cdsIconPreserve ?? []);
   const cdsIconFontFamily = platform.selectors.cdsIconFontFamily;
+  // CDS icons are font glyphs, including spans inside Markdown toolbars.
+  // A later icon rule cannot beat the more specific !important text rules.
+  // Keep icons and their layers out of every text-font override instead.
+  const iconExclusions = nonBlankSelectors(platform.selectors.cdsIconPreserve ?? [])
+    .flatMap((selector) => [selector, `${selector} *`])
+    .map((selector) => `:not(${selector})`).join("");
+  const textFontRule = (selectors: string, family: string): string => {
+    const guarded = iconExclusions.length === 0
+      ? selectors
+      : nonBlankSelectors(selectors.split(",\n")).map((selector) =>
+        `${selector}${iconExclusions}`,
+      ).join(",\n");
+    return buildCssRule(guarded, `  font-family: ${family} !important;`);
+  };
 
   return joinCssBlocks([
     buildFontFaceCss(font, resolveAssetUrl),
     buildPersianGlyphFontFaceCss(font, resolveAssetUrl),
-    buildCssRule(reading, `  font-family: ${stack} !important;`),
-    buildCssRule(markdownText, `  font-family: ${stack} !important;`),
-    buildCssRule(composer, `  font-family: ${stack} !important;`),
-    buildCssRule(composerText, `  font-family: ${stack} !important;`),
+    textFontRule(reading, stack),
+    textFontRule(markdownText, stack),
+    textFontRule(composer, stack),
+    textFontRule(composerText, stack),
     buildCssRule(composerPlaceholder, `  font-family: ${stack} !important;`),
-    buildCssRule(canvas, `  font-family: ${stack} !important;`),
-    buildCssRule(canvasText, `  font-family: ${stack} !important;`),
+    textFontRule(canvas, stack),
+    textFontRule(canvasText, stack),
     buildCssRule(canvasPlaceholder, `  font-family: ${stack} !important;`),
-    buildCssRule(uiGlyphs, `  font-family: ${uiStack} !important;`),
-    buildCssRule(uiConversation, `  font-family: ${stack} !important;`),
+    textFontRule(uiGlyphs, uiStack),
+    textFontRule(uiConversation, stack),
     buildCssRule(
       code,
       `  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;`,
     ),
-    buildCssRule(codeFont, `  font-family: ${stack} !important;`),
+    textFontRule(codeFont, stack),
     buildCssRule(icons, "  font-family: revert !important;"),
     buildCssRule(
       cdsIcons,

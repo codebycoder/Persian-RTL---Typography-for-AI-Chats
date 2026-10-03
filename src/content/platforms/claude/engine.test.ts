@@ -34,6 +34,7 @@ import {
   ASSISTANT_TURN_STATUS_CONTAINER,
   ASSISTANT_TURN_STATUS_ROOT,
   CLAUDE_COMPOSER_EDITOR,
+  CLAUDE_DESIGN_COMPOSER_EDITOR,
   CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
   CLAUDE_DESIGN_CHAT_ROOT,
   CLAUDE_DESIGN_USER_MESSAGE_ROOT,
@@ -43,6 +44,25 @@ import {
 function fontCss(): string {
   return buildConversationFontCss(getRegisteredFont("estedad"), claudeAdapter);
 }
+
+const CDS_ICON_EXCLUSIONS = ':not([data-cds="Icon"]):not([data-cds="Icon"] *)';
+
+test("Claude Code Canvas icon glyphs and layers never receive an important text font", () => {
+  const css = fontCss();
+  const textRules = [...css.matchAll(/([^{}]+)\{([^{}]+)\}/g)]
+    .filter((match) => /font-family: "CFC (?:Estedad|Persian Glyphs)"[^;]*!important/.test(match[2] ?? ""));
+
+  assert.ok(textRules.length > 0);
+  for (const rule of textRules) {
+    for (const selector of (rule[1] ?? "").trim().split(",\n")) {
+      // Placeholder pseudo-elements cannot be CDS icon nodes.
+      if (selector.includes("::placeholder") || selector.endsWith(" p::before")) continue;
+      assert.ok(selector.endsWith(CDS_ICON_EXCLUSIONS), `icon glyph may match: ${selector}`);
+    }
+  }
+  assert.match(css, /\[data-cds="Icon"\] \{\n {2}font-family: "Anthropicons-Variable"[^;]+!important;/);
+  assert.doesNotMatch(css, /(?:^|\n):not\(\[data-cds="Icon"\]\)/);
+});
 
 function bidiCss(): string {
   return buildConversationBidiCss(claudeAdapter);
@@ -80,6 +100,7 @@ function selectorListsContaining(css: string, token: string): string[] {
     preamble
       .split(",")
       .map((part) => part.trim())
+      .map((part) => part.replaceAll(CDS_ICON_EXCLUSIONS, ""))
       .filter((part) => part.includes(token)),
   );
 }
@@ -173,7 +194,7 @@ test("Claude composer font uses the generic font engine and stays off composer c
   const css = fontCss();
   const escaped = CLAUDE_COMPOSER_EDITOR.replaceAll("[", "\\[").replaceAll("]", "\\]");
 
-  assert.match(css, new RegExp(`${escaped} \\{\\n {2}font-family:[^}]*!important`));
+  assert.match(css, new RegExp(`${escaped}(?::not\\([^)]*\\))*,\\n[^{}]+ \\{\\n {2}font-family:[^}]*!important`));
   assert.match(css, new RegExp(`${escaped} :is\\([^)]*\\bp\\b[^)]*\\)`));
   assert.match(css, new RegExp(`${escaped} :is\\([^)]*\\):not\\(pre \\*\\):not\\(code \\*\\)`));
   assert.match(css, new RegExp(`${escaped} :is\\(code, kbd, samp, tt\\)`));
@@ -192,6 +213,22 @@ test("Claude composer font uses the generic font engine and stays off composer c
   assertNoAccidentalGlobalElementSelectors(css);
 });
 
+test("Claude Design composer gets typed and placeholder fonts, direction, and code isolation", () => {
+  const css = fontCss();
+  const editor = CLAUDE_DESIGN_COMPOSER_EDITOR;
+  assert.ok(css.includes(`${editor}${CDS_ICON_EXCLUSIONS}`));
+  assert.ok(css.includes(`${editor} :is(p,`));
+  assert.ok(css.includes(`${editor} p::before`));
+  assert.ok(css.includes(`${editor} :is(code, kbd, samp, tt):not(pre *)`));
+  assert.ok(css.includes(`${editor} pre *`));
+
+  const directionCss = buildClaudeDirectionCss();
+  assert.ok(directionCss.includes(`${editor} [data-rasttext-dir="rtl"]`));
+  assert.ok(directionCss.includes(`${editor} [data-rasttext-dir="ltr"]`));
+  assert.ok(directionCss.includes(`${editor} :is(ul, ol)[data-rasttext-dir]`));
+  assert.doesNotMatch(css + directionCss, /composer-ds-picker-trigger|composer-import-button|live-voice-mic-button|om-rich-input/);
+});
+
 test("Claude sidebar CSS targets conversation titles and nested spans, not the whole sidebar", () => {
   const css = fontCss();
   const selectors = buildUiSurfaceSelectorList(claudeAdapter);
@@ -204,7 +241,7 @@ test("Claude sidebar CSS targets conversation titles and nested spans, not the w
   );
   assert.match(
     css,
-    /\[data-testid="sidebar"\] \[data-row-key\^="chat:"\] \[data-row-label\],\n\[data-testid="sidebar"\] \[data-row-key\^="chat:"\] \[data-row-label\] :is\(span\)/,
+    /\[data-testid="sidebar"\] \[data-row-key\^="chat:"\] \[data-row-label\](?::not\([^)]*\))*,\n\[data-testid="sidebar"\] \[data-row-key\^="chat:"\] \[data-row-label\] :is\(span\)/,
   );
   assert.match(
     css,
@@ -233,7 +270,7 @@ test("Claude sidebar CSS targets conversation titles and nested spans, not the w
 
   assert.doesNotMatch(css, /\[data-testid="sidebar"\]\s*\{/);
   assert.doesNotMatch(css, /data-row-action/);
-  assert.doesNotMatch(css, /\[data-testid="sidebar"\][^\n]*data-cds="Icon"/);
+  assert.doesNotMatch(css.replaceAll(CDS_ICON_EXCLUSIONS, ""), /\[data-testid="sidebar"\][^\n]*data-cds="Icon"/);
   assert.doesNotMatch(css, /sidebar-recents/);
   assert.doesNotMatch(css, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
 });
@@ -320,7 +357,7 @@ test("Claude thinking timeline CSS uses the conversation font on step paragraphs
   const glyphSelectors = buildUiSurfaceSelectorList(claudeAdapter, "glyphs");
   const timelineBlock = css.split("}").find((block) => block.includes("data-timeline-text"));
 
-  assert.equal(conversationSelectors, ASSISTANT_TIMELINE_TEXT_SELECTOR);
+  assert.ok(conversationSelectors.split(",\n").includes(ASSISTANT_TIMELINE_TEXT_SELECTOR));
   assert.doesNotMatch(glyphSelectors, /data-timeline-text/);
   assert.ok(timelineBlock, "expected a thinking timeline font-family rule");
   assert.match(timelineBlock, /\[data-timeline-text\] :is\(p\)/);
@@ -423,10 +460,10 @@ test("Claude font CSS restyles fenced pre blocks and preserves inline monospace"
 
   assert.match(
     css,
-    /\[data-testid="transcript-row"\]\[data-perf-row="assistant"\] pre,\n/,
+    /\[data-testid="transcript-row"\]\[data-perf-row="assistant"\] pre(?::not\([^)]*\))*,\n/,
   );
-  assert.match(css, /\[data-testid="user-message"\] pre,\n/);
-  assert.match(css, /pre \* \{\n {2}font-family:[^}]*!important/);
+  assert.match(css, /\[data-testid="user-message"\] pre(?::not\([^)]*\))*,\n/);
+  assert.match(css, /pre \*(?::not\([^)]*\))* \{\n {2}font-family:[^}]*!important/);
   assert.match(
     css,
     /\[data-testid="chat-input"\]\[contenteditable="true"\]\[role="textbox"\] :is\(code, kbd, samp, tt\)/,

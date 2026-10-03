@@ -11,7 +11,9 @@ import { syncInjectedStyle, type StyleHost } from "./style-lifecycle";
  * Blocks that already carry `data-rasttext-dir` are excluded. That
  * attribute is an explicit RastText direction (not first-strong), and
  * plaintext would independently recompute base direction from the first
- * strong character and undo it. This file does not detect language.
+ * strong character and undo it. Descendants of resolved tables are also
+ * excluded so neutral cells keep the table's alignment and isolation.
+ * This file does not detect language.
  *
  * Intentionally narrower than Markdown text descendants used by the font
  * engine: inline tags stay in the parent paragraph context, and structural
@@ -46,6 +48,8 @@ function bidiTargetExclusions(platform: PlatformAdapter): string {
     ':not([contenteditable="true"] *)',
     ':not([contenteditable="plaintext-only"] *)',
     `:not([${RASTTEXT_DIR_ATTRIBUTE}])`,
+    // Resolved tables own neutral-cell alignment and isolation too.
+    `:not(table[${RASTTEXT_DIR_ATTRIBUTE}] *)`,
     ...nonBlankSelectors(platform.selectors.composer).map((selector) => `:not(${selector} *)`),
   ].join("");
 }

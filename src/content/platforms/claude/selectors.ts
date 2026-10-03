@@ -44,6 +44,8 @@
  *
  * Composer (verified 2026-09, authenticated Claude):
  *   [data-testid="chat-input"][contenteditable="true"][role="textbox"]
+ * Design composer (verified 2026-10 from supplied DOM):
+ *   [data-testid="chat-composer-input"][contenteditable="true"][role="textbox"]
  *   Logical typed blocks are descendant p / li / blockquote. Claude may
  *   set dir="rtl" on the editor and dir="auto" on paragraphs; RastText
  *   must not rewrite those. Do not depend on ProseMirror, tiptap,
@@ -123,6 +125,16 @@ export const CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT =
 export const CLAUDE_DESIGN_USER_MESSAGE_ROOT =
   `${CLAUDE_DESIGN_CHAT_ROOT} [data-index] span[style*="white-space: pre-wrap"]`;
 
+/**
+ * Completed Design questions (user-supplied DOM, 2026-10). Each div line
+ * combines an English label span and answer text, so first-strong BiDi
+ * cannot resolve Persian answers. Only text divs/spans receive the font;
+ * the header's `i.ai-*` icon keeps its own host face.
+ */
+export const CLAUDE_QUESTION_RECEIPT_ROOT = '[data-testid="question-receipt"]';
+export const CLAUDE_QUESTION_RECEIPT_LINE =
+  `${CLAUDE_QUESTION_RECEIPT_ROOT} [data-testid="question-receipt-line"]`;
+
 export const CONVERSATION_READING_SELECTORS = [
   ASSISTANT_PROSE_ROOT,
   USER_MESSAGE_ROOT,
@@ -157,6 +169,15 @@ export const BIDI_LEAF_SELECTORS = CONVERSATION_READING_SELECTORS.filter(
 export const CLAUDE_COMPOSER_EDITOR =
   '[data-testid="chat-input"][contenteditable="true"][role="textbox"]';
 
+/** Editable text only; Design system picker and action controls are siblings. */
+export const CLAUDE_DESIGN_COMPOSER_EDITOR =
+  '[data-testid="chat-composer-input"][contenteditable="true"][role="textbox"]';
+
+export const COMPOSER_SELECTORS = [
+  CLAUDE_COMPOSER_EDITOR,
+  CLAUDE_DESIGN_COMPOSER_EDITOR,
+] as const;
+
 export const FENCED_CODE_BIDI_SELECTORS = [
   `${ASSISTANT_ROW_ROOT} pre`,
   `${ASSISTANT_ROW_ROOT} pre code`,
@@ -166,8 +187,7 @@ export const FENCED_CODE_BIDI_SELECTORS = [
   `${CLAUDE_SKILL_FILE_VIEWER} pre code`,
   `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre`,
   `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre code`,
-  `${CLAUDE_COMPOSER_EDITOR} pre`,
-  `${CLAUDE_COMPOSER_EDITOR} pre code`,
+  ...COMPOSER_SELECTORS.flatMap((editor) => [`${editor} pre`, `${editor} pre code`]),
 ] as const;
 
 export const CODE_FONT_SELECTORS = [
@@ -179,8 +199,7 @@ export const CODE_FONT_SELECTORS = [
   `${CLAUDE_SKILL_FILE_VIEWER} pre *`,
   `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre`,
   `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} pre *`,
-  `${CLAUDE_COMPOSER_EDITOR} pre`,
-  `${CLAUDE_COMPOSER_EDITOR} pre *`,
+  ...COMPOSER_SELECTORS.flatMap((editor) => [`${editor} pre`, `${editor} pre *`]),
 ] as const;
 
 export const CODE_PRESERVE_SELECTORS = [
@@ -192,15 +211,11 @@ export const CODE_PRESERVE_SELECTORS = [
   `${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt):not(pre *) *`,
   `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
   `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(code, kbd, samp, tt):not(pre *) *`,
-  `${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt):not(pre *)`,
-  `${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt):not(pre *) *`,
+  ...COMPOSER_SELECTORS.flatMap((editor) => [
+    `${editor} :is(code, kbd, samp, tt):not(pre *)`,
+    `${editor} :is(code, kbd, samp, tt):not(pre *) *`,
+  ]),
 ] as const;
-
-/**
- * Normal Claude prompt editor only. The composer wrapper and action
- * chrome are intentionally omitted so attach/send/voice stay untouched.
- */
-export const COMPOSER_SELECTORS = [CLAUDE_COMPOSER_EDITOR] as const;
 
 /**
  * Claude has no verified Canvas / writing-block editor in this task.
@@ -212,7 +227,7 @@ export const CANVAS_EDITOR_SELECTORS = [] as const;
  * controls if any appear inside a reading root.
  */
 export const COMPOSER_AND_CONTROL_EXCLUSIONS = [
-  CLAUDE_COMPOSER_EDITOR,
+  ...COMPOSER_SELECTORS,
   '[contenteditable="true"]',
   '[contenteditable="plaintext-only"]',
   "textarea",
@@ -232,6 +247,8 @@ export const COMPOSER_AND_CONTROL_EXCLUSIONS = [
  */
 export const CLAUDE_UI_SURFACE_IDS = [
   "sidebar-chat-titles",
+  "chat-list-titles",
+  "question-receipt",
   "ask-user-answers-card",
   "ask-user-input-banner",
   "assistant-turn-status",
@@ -285,6 +302,21 @@ export const SIDEBAR_CHAT_TITLE_SELECTORS = [
 ] as const;
 
 export const SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS = ["span"] as const;
+
+/**
+ * Chat-list table titles (user-supplied Claude DOM, 2026-10). The cell's
+ * overlay link identifies a chat; leaf spans hold its visible title.
+ * Exclude controls, icon glyphs, and relative-time wrappers. Do not use
+ * generated IDs, utility classes, or a specific conversation UUID.
+ */
+export const CLAUDE_CHAT_LIST_TITLE_CELL =
+  'tr[data-hoverable][data-clickable] td:has(> a[href^="/chat/"][aria-label])';
+
+const CHAT_LIST_TITLE_TEXT_SPAN =
+  'span:not(:has(*)):not(button *):not([role="button"] *):not([data-cds="Icon"]):not([aria-hidden="true"]):not([role="img"])';
+
+export const CLAUDE_CHAT_LIST_TITLE_SELECTOR =
+  `${CLAUDE_CHAT_LIST_TITLE_CELL} ${CHAT_LIST_TITLE_TEXT_SPAN}`;
 
 /**
  * Completed AskUserQuestion answers card. Verified against authenticated
@@ -420,8 +452,7 @@ export const ICON_PRESERVE_SELECTORS = [
   `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} svg *`,
   `${CLAUDE_DESIGN_USER_MESSAGE_ROOT} svg`,
   `${CLAUDE_DESIGN_USER_MESSAGE_ROOT} svg *`,
-  `${CLAUDE_COMPOSER_EDITOR} svg`,
-  `${CLAUDE_COMPOSER_EDITOR} svg *`,
+  ...COMPOSER_SELECTORS.flatMap((editor) => [`${editor} svg`, `${editor} svg *`]),
   ...ASK_USER_ICON_PRESERVE_SELECTORS,
   ...ASSISTANT_TURN_STATUS_ICON_PRESERVE_SELECTORS,
 ] as const;
@@ -431,6 +462,17 @@ export const CLAUDE_UI_SURFACES: readonly ClaudeUiSurface[] = [
     id: "sidebar-chat-titles",
     selectors: SIDEBAR_CHAT_TITLE_SELECTORS,
     textDescendants: SIDEBAR_CHAT_TITLE_TEXT_DESCENDANTS,
+  },
+  {
+    id: "chat-list-titles",
+    selectors: [CLAUDE_CHAT_LIST_TITLE_SELECTOR],
+    textDescendants: [],
+  },
+  {
+    id: "question-receipt",
+    selectors: [`${CLAUDE_QUESTION_RECEIPT_ROOT} > div`, CLAUDE_QUESTION_RECEIPT_LINE],
+    textDescendants: ["div", "span"],
+    font: "conversation",
   },
   {
     id: "ask-user-answers-card",

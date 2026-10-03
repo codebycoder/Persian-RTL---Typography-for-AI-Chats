@@ -1,14 +1,18 @@
 import { RASTTEXT_DIR_ATTRIBUTE } from "@shared/constants";
 import { buildCssRule, joinCssBlocks } from "../../css-rule";
+import { buildTableDirectionCss, detectTableDirection } from "../../table-direction";
 import {
   ASK_USER_PLAINTEXT_BIDI_SELECTORS,
   ASSISTANT_PROSE_ROOT,
   ASSISTANT_ROW_ROOT,
   ASSISTANT_TURN_STATUS_PLAINTEXT_BIDI_SELECTORS,
-  CLAUDE_COMPOSER_EDITOR,
+  CLAUDE_CHAT_LIST_TITLE_SELECTOR,
   CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
   CLAUDE_DESIGN_USER_MESSAGE_ROOT,
+  CLAUDE_QUESTION_RECEIPT_LINE,
+  CLAUDE_QUESTION_RECEIPT_ROOT,
   CLAUDE_SKILL_FILE_VIEWER,
+  COMPOSER_SELECTORS,
   FENCED_CODE_BIDI_SELECTORS,
   USER_MESSAGE_ROOT,
 } from "./selectors";
@@ -29,14 +33,17 @@ import {
  *   (`[data-skill-file-viewer="true"]`)
  * - logical assistant Markdown blocks inside Design / Design System chat
  *   (`[data-testid="chat-messages"][data-chat-id] ... .om-md-content`)
- * - logical editable blocks inside the normal composer
- *   (`[data-testid="chat-input"][contenteditable="true"][role="textbox"]`)
+ * - answer lines inside completed Design question receipts
+ *   (`[data-testid="question-receipt"] [data-testid="question-receipt-line"]`)
+ * - logical editable blocks inside normal and Design composers
+ *   (`chat-input` / `chat-composer-input` editable textboxes)
  *
  * Fenced `pre` blocks, AskUserQuestion span text units, and the assistant
  * TurnStatus morphing label use CSS `unicode-bidi: plaintext` so mixed
  * Persian/English content can resolve direction locally. The pre-wrapped
- * Design user-message span uses the same CSS-only path. Inline `code` inside
- * paragraphs is not scanned.
+ * Design user-message span uses the same CSS-only path. Chat-list titles
+ * also use plaintext direction, with explicit left alignment to preserve
+ * their placement. Inline `code` inside paragraphs is not scanned.
  * Sidebar, toolbars, and composer chrome are never scanned. Composer typing uses
  * `input` / `focusin` events (see `lifecycle.ts`); the assistant
  * MutationObserver is not reused for the composer.
@@ -76,6 +83,7 @@ export const CLAUDE_DIRECTION_BLOCK_ELEMENTS = [
   "ol",
   "li",
   "blockquote",
+  "table",
   "th",
   "td",
 ] as const;
@@ -97,6 +105,7 @@ const BLOCK_TAGS = new Set<string>(
 const CODE_EXCLUSION_TAGS = new Set(["CODE", "PRE", "KBD", "SAMP"]);
 
 const BLOCK_SELECTOR = CLAUDE_DIRECTION_BLOCK_ELEMENTS.join(", ");
+const READING_BLOCK_SELECTOR = `${BLOCK_SELECTOR}, ${CLAUDE_QUESTION_RECEIPT_LINE}`;
 const COMPOSER_BLOCK_TAGS = new Set<string>(
   CLAUDE_COMPOSER_DIRECTION_BLOCKS.map((tag) => tag.toUpperCase()),
 );
@@ -338,16 +347,20 @@ export function isDirectionReadingRoot(element: Element): boolean {
   return (
     isAssistantProseRoot(element) ||
     isSkillFileViewerRoot(element) ||
-    isDesignAssistantProseRoot(element)
+    isDesignAssistantProseRoot(element) ||
+    element.getAttribute("data-testid") === "question-receipt"
   );
 }
 
 export function isSupportedAssistantBlock(element: Element): boolean {
-  if (!BLOCK_TAGS.has(element.tagName)) {
+  const isReceiptLine =
+    element.getAttribute("data-testid") === "question-receipt-line" &&
+    element.closest(CLAUDE_QUESTION_RECEIPT_ROOT) !== null;
+  if (!isReceiptLine && !BLOCK_TAGS.has(element.tagName)) {
     return false;
   }
 
-  if (!isInsideDirectionReadingRoot(element)) {
+  if (!isReceiptLine && !isInsideDirectionReadingRoot(element)) {
     return false;
   }
 
@@ -379,8 +392,9 @@ export function resolveAssistantBlock(element: Element): void {
 }
 
 export function isComposerEditor(element: Element): boolean {
+  const testId = element.getAttribute("data-testid");
   return (
-    element.getAttribute("data-testid") === "chat-input" &&
+    (testId === "chat-input" || testId === "chat-composer-input") &&
     element.getAttribute("contenteditable") === "true" &&
     element.getAttribute("role") === "textbox"
   );
@@ -470,37 +484,55 @@ export function buildClaudeDirectionCss(): string {
     `${ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
     `${CLAUDE_SKILL_FILE_VIEWER} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
     `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
-    `${CLAUDE_COMPOSER_EDITOR} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
-    `${CLAUDE_COMPOSER_EDITOR}[${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
+    `${CLAUDE_QUESTION_RECEIPT_LINE}[${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
+    ...COMPOSER_SELECTORS.flatMap((editor) => [
+      `${editor} [${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
+      `${editor}[${RASTTEXT_DIR_ATTRIBUTE}="rtl"]`,
+    ]),
   ].join(",\n");
   const ltr = [
     `${ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
     `${CLAUDE_SKILL_FILE_VIEWER} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
     `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
-    `${CLAUDE_COMPOSER_EDITOR} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
-    `${CLAUDE_COMPOSER_EDITOR}[${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
+    `${CLAUDE_QUESTION_RECEIPT_LINE}[${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
+    ...COMPOSER_SELECTORS.flatMap((editor) => [
+      `${editor} [${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
+      `${editor}[${RASTTEXT_DIR_ATTRIBUTE}="ltr"]`,
+    ]),
   ].join(",\n");
   const ltrListText = [
     `${ASSISTANT_PROSE_ROOT} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
     `${CLAUDE_SKILL_FILE_VIEWER} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
     `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
-    `${CLAUDE_COMPOSER_EDITOR} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`,
+    ...COMPOSER_SELECTORS.map((editor) => `${editor} :is(li)[${LTR_LIST_TEXT_ATTRIBUTE}]`),
   ].join(",\n");
   const listSpacing = [
     `${ASSISTANT_PROSE_ROOT} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
     `${CLAUDE_SKILL_FILE_VIEWER} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
     `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
-    `${CLAUDE_COMPOSER_EDITOR} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`,
+    ...COMPOSER_SELECTORS.map((editor) => `${editor} :is(ul, ol)[${RASTTEXT_DIR_ATTRIBUTE}]`),
   ].join(",\n");
   const inlineCode = [
     `${ASSISTANT_ROW_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
     `${USER_MESSAGE_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
     `${CLAUDE_SKILL_FILE_VIEWER} :is(code, kbd, samp, tt):not(pre *)`,
     `${CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT} :is(code, kbd, samp, tt):not(pre *)`,
-    `${CLAUDE_COMPOSER_EDITOR} :is(code, kbd, samp, tt):not(pre *)`,
+    ...COMPOSER_SELECTORS.map((editor) => `${editor} :is(code, kbd, samp, tt):not(pre *)`),
   ].join(",\n");
 
   return joinCssBlocks([
+    buildCssRule(
+      `${CLAUDE_QUESTION_RECEIPT_LINE} > span`,
+      "  direction: ltr !important;\n  unicode-bidi: isolate !important;",
+    ),
+    buildCssRule(
+      `${CLAUDE_QUESTION_RECEIPT_LINE}[${RASTTEXT_DIR_ATTRIBUTE}="rtl"] > span`,
+      "  padding-inline-start: 0.25em;",
+    ),
+    buildCssRule(
+      CLAUDE_CHAT_LIST_TITLE_SELECTOR,
+      "  unicode-bidi: plaintext !important;\n  text-align: left !important;",
+    ),
     buildCssRule(
       plaintextBidi,
       [
@@ -529,6 +561,11 @@ export function buildClaudeDirectionCss(): string {
       inlineCode,
       "  direction: ltr !important;\n  unicode-bidi: isolate !important;",
     ),
+    buildTableDirectionCss([
+      ASSISTANT_PROSE_ROOT,
+      CLAUDE_SKILL_FILE_VIEWER,
+      CLAUDE_DESIGN_ASSISTANT_PROSE_ROOT,
+    ]),
   ]);
 }
 
@@ -633,6 +670,11 @@ function isSupportedBlockInCurrentSurface(element: Element): boolean {
 }
 
 function resolveBlockAndListState(element: Element): void {
+  const table = element.closest("table");
+  if (table && isSupportedAssistantBlock(table)) {
+    applyBlockDirection(table, detectTableDirection(table, getDetectableText, detectListDirection));
+    if (element === table) return;
+  }
   if (isListElement(element)) {
     resolveList(element);
     return;
@@ -716,6 +758,14 @@ function scanExistingReadingRoots(doc: Document): void {
       attachReadingRootObserver(root);
     }
   }
+
+  const receipts = doc.querySelectorAll(CLAUDE_QUESTION_RECEIPT_ROOT);
+  for (let index = 0; index < receipts.length; index += 1) {
+    const root = receipts[index];
+    if (root) {
+      attachReadingRootObserver(root);
+    }
+  }
 }
 
 function attachReadingRootObserver(root: Element): void {
@@ -748,7 +798,7 @@ function attachReadingRootObserver(root: Element): void {
 }
 
 function resolveReadingRootBlocks(root: Element): void {
-  const blocks = root.querySelectorAll(BLOCK_SELECTOR);
+  const blocks = root.querySelectorAll(READING_BLOCK_SELECTOR);
   for (let index = 0; index < blocks.length; index += 1) {
     const block = blocks[index];
     if (block) {
@@ -791,7 +841,7 @@ function collectBlocksFromMutations(mutations: MutationRecord[]): void {
         enqueueBlock(element);
       }
 
-      const nested = element.querySelectorAll(BLOCK_SELECTOR);
+      const nested = element.querySelectorAll(READING_BLOCK_SELECTOR);
       for (let nestedIndex = 0; nestedIndex < nested.length; nestedIndex += 1) {
         const block = nested[nestedIndex];
         if (block) {
@@ -951,6 +1001,14 @@ function collectDirectionReadingRoots(node: Node): Element[] {
   for (let index = 0; index < nestedViewers.length; index += 1) {
     const candidate = nestedViewers[index];
     if (candidate && isSkillFileViewerRoot(candidate) && candidate !== element) {
+      found.push(candidate);
+    }
+  }
+
+  const nestedReceipts = element.querySelectorAll(CLAUDE_QUESTION_RECEIPT_ROOT);
+  for (let index = 0; index < nestedReceipts.length; index += 1) {
+    const candidate = nestedReceipts[index];
+    if (candidate) {
       found.push(candidate);
     }
   }
