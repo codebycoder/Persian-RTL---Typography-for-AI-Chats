@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+.env
 .pnpm-debug.log*
 
 # Build output
@@ -46,4 +47,3 @@ fonts/*
 !fonts/*-Variable.ttf
 !fonts/*-OFL.txt
 !fonts/LICENSES.md
-config.bat
